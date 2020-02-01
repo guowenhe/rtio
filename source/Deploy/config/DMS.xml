@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!-- This file was written by IceGrid GUI -->
+<icegrid>
+   <application name="DMS">
+      <variable name="logpath" value="${clusterpath}/logs"/>
+      <server-template id="DeviceHub">
+         <parameter name="instance-name" default="${application}.DeviceHub"/>
+         <parameter name="index" default="1"/>
+         <parameter name="endpoints" default="default"/>
+         <parameter name="workdir" default="DeviceHub"/>
+         <server id="${instance-name}-${index}" activation="on-demand" application-distrib="false" exe="${server.distrib}/${workdir}/server" pwd="${server.distrib}/${workdir}">
+            <properties>
+               <property name="IdentityA" value="${application}.DeviceHubA"/>
+               <property name="AdapterName" value="DeviceHub"/>
+               <property name="IdentityB" value="${application}.DeviceHubB"/>
+               <property name="Ice.StdOut" value="${logpath}/${server}.stdout"/>
+               <property name="Ice.StdErr" value="${logpath}/${server}.stderr"/>
+               <property name="StatusServerIdentity" value="DMS.StatusServer"/>
+               <property name="Ice.Default.InvocationTimeout" value="5000"/>
+            </properties>
+            <log path="${logpath}/${server}.log" property="Ice.LogFile"/>
+            <distrib icepatch="Facilities.IcePatch2/server">
+               <directory>${workdir}</directory>
+            </distrib>
+            <adapter name="DeviceHub" endpoints="default" id="${server}.DeviceHub" replica-group="DeviceHubGroup"/>
+         </server>
+      </server-template>
+      <server-template id="MessageTrigger">
+         <parameter name="instance-name" default="${application}.MessageTrigger"/>
+         <parameter name="index" default="1"/>
+         <parameter name="endpoints" default="default"/>
+         <parameter name="workdir" default="MessageTrigger"/>
+         <server id="${instance-name}-${index}" activation="on-demand" application-distrib="false" exe="${server.distrib}/${workdir}/server" pwd="${server.distrib}/${workdir}">
+            <properties>
+               <property name="IdentityA" value="${application}.MessageTriggerA"/>
+               <property name="AdapterName" value="MessageTrigger"/>
+               <property name="IdentityB" value="${application}.MessageTriggerB"/>
+               <property name="Ice.StdOut" value="${logpath}/${server}.stdout"/>
+               <property name="Ice.StdErr" value="${logpath}/${server}.stderr"/>
+               <property name="Ice.Default.InvocationTimeout" value="5000"/>
+            </properties>
+            <log path="${logpath}/${server}.log" property="Ice.LogFile"/>
+            <distrib icepatch="Facilities.IcePatch2/server">
+               <directory>${workdir}</directory>
+            </distrib>
+            <adapter name="MessageTrigger" endpoints="default" id="${server}.MessageTrigger" replica-group="MessageTriggerGroup"/>
+         </server>
+      </server-template>
+      <server-template id="StatusServer">
+         <parameter name="instance-name" default="${application}.StatusServer"/>
+         <parameter name="index" default="1"/>
+         <parameter name="endpoints" default="default"/>
+         <parameter name="workdir" default="StatusServer"/>
+         <server id="${instance-name}-${index}" activation="on-demand" application-distrib="false" exe="${server.distrib}/${workdir}/server" pwd="${server.distrib}/${workdir}">
+            <properties>
+               <property name="Identity" value="${application}.StatusServer"/>
+               <property name="AdapterName" value="StatusServer"/>
+               <property name="Ice.StdOut" value="${logpath}/${server}.stdout"/>
+               <property name="Ice.StdErr" value="${logpath}/${server}.stderr"/>
+               <property name="RedisHost" value="127.0.0.1"/>
+               <property name="RedisPort" value="6379"/>
+               <property name="WorkerNum" value="2"/>
+            </properties>
+            <log path="${logpath}/${server}.log" property="Ice.LogFile"/>
+            <distrib icepatch="Facilities.IcePatch2/server">
+               <directory>${workdir}</directory>
+            </distrib>
+            <adapter name="StatusServer" endpoints="default" id="${server}.ServerStatus" replica-group="StatusServerGroup"/>
+         </server>
+      </server-template>
+      <replica-group id="DeviceHubGroup">
+         <load-balancing type="random" n-replicas="0"/>
+         <object identity="${application}.DeviceHubA" type="DMS::DeviceHub"/>
+         <object identity="${application}.DeviceHubB" type="DMS::DeviceHub"/>
+      </replica-group>
+      <replica-group id="MessageTriggerGroup">
+         <load-balancing type="random" n-replicas="0"/>
+         <object identity="${application}.MessageTriggerA" type="DMS::MessageTrigger"/>
+         <object identity="${application}.MessageTriggerB" type="DMS::MessageTrigger"/>
+      </replica-group>
+      <replica-group id="StatusServerGroup">
+         <load-balancing type="random" n-replicas="0"/>
+         <object identity="${application}.StatusServer" type="DMS::StatusServer"/>
+      </replica-group>
+      <node name="node1">
+         <variable name="clusterpath" value="/home/wenhe/Work/rtio-project/cluster"/>
+         <server-instance template="DeviceHub"/>
+         <server-instance template="MessageTrigger"/>
+         <server-instance template="StatusServer"/>
+      </node>
+      <node name="node2">
+         <variable name="clusterpath" value="/home/wenhe/Work/rtio-project/cluster"/>
+      </node>
+   </application>
+</icegrid>

@@ -1,0 +1,36 @@
+#
+# The IceGrid instance name.
+#
+IceGrid.InstanceName=VerijsGrid
+
+#
+# IceGrid registry configuration.
+#
+IceGrid.Registry.Client.Endpoints=default -h localhost -p 12000
+IceGrid.Registry.Server.Endpoints=default -h localhost
+IceGrid.Registry.Internal.Endpoints=default -h localhost
+IceGrid.Registry.LMDB.Path=db/master
+IceGrid.Registry.PermissionsVerifier=VerijsGrid/NullPermissionsVerifier
+IceGrid.Registry.AdminPermissionsVerifier=VerijsGrid/NullPermissionsVerifier
+IceGrid.Registry.DefaultTemplates=templates.xml
+Ice.Default.Timeout=10000
+
+Ice.StdErr=db/master/stderr.txt
+Ice.StdOut=db/master/stdout.txt
+
+#
+# IceMX configuration
+#
+IceMX.Metrics.Debug.GroupBy=id
+IceMX.Metrics.Debug.Disabled=1
+IceMX.Metrics.Debug.Reject.parent=Ice\.Admin
+IceMX.Metrics.ByParent.GroupBy=parent
+IceMX.Metrics.ByParent.Disabled=1
+
+#
+# Trace properties.
+#
+Ice.ProgramName=Master
+IceGrid.Registry.Trace.Node=2
+IceGrid.Registry.Trace.Replica=2
+IceGrid.Registry.Trace.Admin=1

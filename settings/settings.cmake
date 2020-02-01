@@ -1,0 +1,5 @@
+set(CMAKE_BUILD_TYPE DEBUG) 
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC -std=c++17")
+#add_definitions(-D__cplusplus=201103L)  
+add_definitions(-DICE_CPP11_MAPPING)  
+set(CMAKE_INSTALL_PREFIX  ${CMAKE_CURRENT_SOURCE_DIR}/source/Deploy)
