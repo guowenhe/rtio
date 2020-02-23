@@ -24,8 +24,8 @@ public:
 class MessageTiggerBI: public MessageTriggerB
 {
 public:
-    virtual void pushAsync(::std::shared_ptr<PushReq> req,
-            ::std::function<void(const ::std::shared_ptr<PushResp>& resp)> response,
+    virtual void sendAsync(::std::shared_ptr<SendReq> req,
+            ::std::function<void(const ::std::shared_ptr<SendResp>& resp)> response,
             ::std::function<void(::std::exception_ptr)> exception, const ::Ice::Current& current) override;
 
 };

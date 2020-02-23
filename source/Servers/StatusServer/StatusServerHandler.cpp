@@ -30,9 +30,9 @@ void DeviceStatusResource::init()
 void DeviceStatusResource::check()
 {
     if(getRedis()->requireRedisCheck()
-            || Common::getClockCoarse() - _clockPoint > _redisConnectCheckInterval)
+            || Util::getClockCoarse() - _clockPoint > _redisConnectCheckInterval)
     {
-        _clockPoint = Common::getClockCoarse();
+        _clockPoint = Util::getClockCoarse();
 
 //        log2D(ServerGlobal::getInstance()->getCommunicator(), "clockPoint=" << _clockPoint);
         if(!getRedis()->ping())
@@ -47,7 +47,7 @@ void SetStatusHandler::processing(MultiWorker::Resource* resource)
     logSet(_current.adapter->getCommunicator(), _req->sn);
     logI("deviceId=" << _req->deviceId);
     auto r = static_cast<DeviceStatusResource*>(resource);
-    RC::Code code = RC::Code::FAILED;
+    RC::Code code = RC::Code::FAIL;
     try
     {
         Redis::DiviceInfo info;
@@ -60,7 +60,7 @@ void SetStatusHandler::processing(MultiWorker::Resource* resource)
             logE("redis setDeviceInfo error, deviceId=" << _req->deviceId);
             throw std::logic_error("redis setDeviceInfo error");
         }
-        code = RC::Code::SUCCEED;
+        code = RC::Code::SUCCESS;
     }
     catch(std::exception& ex)
     {
@@ -79,14 +79,14 @@ void QueryStatusHandler::processing(MultiWorker::Resource* resource)
     logI("deviceId=" << _req->deviceId);
 
     auto r = static_cast<DeviceStatusResource*>(resource);
-    RC::Code code = RC::Code::FAILED;
+    RC::Code code = RC::Code::FAIL;
     Redis::DiviceInfo info;
     try
     {
         Redis::RetCode ret = r->getRedis()->getDeviceInfo(_req->deviceId, info);
         if(Redis::RetCode::SUCCEED == ret)
         {
-            code =  RC::Code::SUCCEED;
+            code =  RC::Code::SUCCESS;
         }
         else if(Redis::RetCode::EMPTY == ret)
         {
@@ -105,7 +105,7 @@ void QueryStatusHandler::processing(MultiWorker::Resource* resource)
     }
 
     auto resp = std::make_shared<DMS::QueryStatusResp>();
-    if(RC::Code::SUCCEED == code)
+    if(RC::Code::SUCCESS == code)
     {
         resp->status = static_cast<ClientStatus>(info.status);
         resp->accessProxy = info.proxy;

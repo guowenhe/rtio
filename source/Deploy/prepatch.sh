@@ -19,5 +19,5 @@ echo "copy independent servers"
 cp -rf independent/AccessServer 		../../cluster/independent/
 cp -f config/access-server.config 	../../cluster/independent/AccessServer/
 
-cp -rf independent/APIPusher 		../../cluster/independent/
-cp -f config/api-pusher.config 	../../cluster/independent/APIPusher/
+cp -rf independent/APISender 		../../cluster/independent/
+cp -f config/api-sender.config 	../../cluster/independent/APISender/

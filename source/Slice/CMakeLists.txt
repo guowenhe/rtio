@@ -1,7 +1,9 @@
 
 cmake_minimum_required (VERSION 2.8)
-project(rtio-slice)
 
+if(BUILD_ALL_PROJECT) 
+project(rtio-slice)
+endif()
 
 if(SLICE_DIR)
 else()

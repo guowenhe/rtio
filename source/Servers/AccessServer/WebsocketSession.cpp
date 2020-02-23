@@ -171,7 +171,7 @@ void WebsocketSession::onRead(beast::error_code ec, std::size_t)
 
 	        if(0 == dispatchResp.code)
 	        {
-	            _responseSession.response(dispatchResp.id, (int)RC::Code::SUCCEED);
+	            _responseSession.response(dispatchResp.id, (int)RC::Code::SUCCESS);
 	        }
 	        else
 	        {

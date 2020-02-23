@@ -21,7 +21,7 @@ endif()
 include_directories(./)
 include_directories(../../Common/cpp)
 include_directories(${PROJECT_BINARY_DIR}/../../Slice/slice/cpp/)
-include_directories($ENV{BOOST_HOME}/include)
+
 
 #add_executable(server 
 #  Server.cpp

@@ -12,13 +12,13 @@ module DMS
         int code = -1;
     } 
     
-    class PushReq
+    class SendReq
     {
         int sn;
         string deviceId;
         string message;
     }
-    class PushResp
+    class SendResp
     {
         int sn;
         int deviceCode = -1; // device return code
@@ -31,7 +31,7 @@ module DMS
     }
     interface MessageTriggerB
     {
-        ["amd"] void push(PushReq req, out PushResp resp);        
+        ["amd"] void send(SendReq req, out SendResp resp);        
     }
 
 } //DMS

@@ -38,11 +38,11 @@ public:
             std::cout << "server start "  << "@" << IceUtil::Time::now().toDateTime() << std::endl;
             if(argc != 1)
             {
-                throw GxError<int>(EXIT_FAILURE, RC::where() + "arguments error");
+                throw GxError<int>(EXIT_FAILURE, Rtio_where() + "arguments error");
             }
             if(ServerGlobal::getInstance()->init(communicator()))
             {
-                throw GxError<int>(EXIT_FAILURE,  RC::where() + "ServerGlobal communicator init error");
+                throw GxError<int>(EXIT_FAILURE,  Rtio_where() + "ServerGlobal communicator init error");
             }
 
             auto properties = communicator()->getProperties();

@@ -58,11 +58,11 @@ public:
         }
         catch(GxError<RC::Code>& ex)
         {
-            failed(ex.code(), RC::where() + ex.what());
+            failed(ex.code(), Rtio_where() + ex.what());
         }
         catch(std::exception& ex)
         {
-            failed(RC::Code::FAILED, RC::where() + ex.what());
+            failed(RC::Code::FAIL, Rtio_where() + ex.what());
         }
     }
     void statusResponse(std::shared_ptr<QueryStatusResp> resp)
@@ -71,7 +71,7 @@ public:
         logI("QueryStatusResp code=" << static_cast<RC::Code>(resp->code));
         try
         {
-            if(static_cast<RC::Code>(resp->code) != RC::Code::SUCCEED)
+            if(static_cast<RC::Code>(resp->code) != RC::Code::SUCCESS)
             {
                 throw GxError<RC::Code>(static_cast<RC::Code>(resp->code), "failed");
             }
@@ -95,11 +95,11 @@ public:
         }
         catch(GxError<RC::Code>& ex)
         {
-            failed(ex.code(), RC::where() + ex.what());
+            failed(ex.code(), Rtio_where() + ex.what());
         }
         catch(std::exception& ex)
         {
-            failed(RC::Code::FAILED, RC::where() + ex.what());
+            failed(RC::Code::FAIL, Rtio_where() + ex.what());
         }
     }
 
@@ -129,11 +129,11 @@ public:
         }
         catch(GxError<RC::Code>& ex)
         {
-            failed(ex.code(), RC::where() + ex.what());
+            failed(ex.code(), Rtio_where() + ex.what());
         }
         catch(std::exception& ex)
         {
-            failed(RC::Code::FAILED, RC::where() + ex.what());
+            failed(RC::Code::FAIL, Rtio_where() + ex.what());
         }
     }
     void dispatchResponse(const ::std::shared_ptr<::DMS::MessageAResp> respA)
@@ -143,7 +143,7 @@ public:
             logSet(_current.adapter->getCommunicator(),  respA->sn);
             logI("respA->code="<< static_cast<RC::Code>(respA->code));
 
-            if(static_cast<RC::Code>(respA->code) !=  RC::Code::SUCCEED)
+            if(static_cast<RC::Code>(respA->code) !=  RC::Code::SUCCESS)
             {
                 if(static_cast<RC::Code>(respA->code) == RC::Code::ACCESSSERVER_TIMEOUT)
                 {
@@ -155,16 +155,16 @@ public:
             auto respB = std::make_shared<MessageBResp>();
             respB->sn = respA->sn;
             respB->asCode = respA->code;
-            respB->code = static_cast<int>(RC::Code::SUCCEED);
+            respB->code = static_cast<int>(RC::Code::SUCCESS);
             _response(respB);
         }
         catch(GxError<RC::Code>& ex)
         {
-            failed(ex.code(), RC::where() + ex.what());
+            failed(ex.code(), Rtio_where() + ex.what());
         }
         catch(std::exception& ex)
         {
-            failed(RC::Code::FAILED, RC::where() + ex.what());
+            failed(RC::Code::FAIL, Rtio_where() + ex.what());
         }
     }
     void exception(::std::exception_ptr ex)
@@ -177,7 +177,7 @@ public:
         }
         catch(const std::exception& ex)
         {
-            failed(RC::Code::FAILED, RC::where() + ex.what());
+            failed(RC::Code::FAIL, Rtio_where() + ex.what());
         }
     }
     void failed(RC::Code code, const std::string& what)
@@ -187,7 +187,7 @@ public:
         auto resp = std::make_shared<MessageBResp>();
         resp->sn = _req->sn;
         resp->asCode = (code == RC::Code::DEVICEHUB_DIVICE_AS_TIMEOUT) ?
-                        static_cast<int>(RC::Code::ACCESSSERVER_TIMEOUT) : static_cast<int>(RC::Code::FAILED);
+                        static_cast<int>(RC::Code::ACCESSSERVER_TIMEOUT) : static_cast<int>(RC::Code::FAIL);
         resp->code = static_cast<int>(code);
         _response(resp);
     }

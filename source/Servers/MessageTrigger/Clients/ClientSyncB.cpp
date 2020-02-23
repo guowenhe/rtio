@@ -39,15 +39,15 @@ int main(int argc, char* argv[])
         for(int i = 0; i < 500; ++i)
         {
 
-            auto req = make_shared<DMS::PushReq>();
-            auto resp = make_shared<DMS::PushResp>();
+            auto req = make_shared<DMS::SendReq>();
+            auto resp = make_shared<DMS::SendResp>();
             req->sn = time(NULL);
             req->deviceId = argv[1]; // "device001";
             req->message = std::to_string(i) + " message form b";
             server = server->ice_connectionCached(false);
             server = server->ice_locatorCacheTimeout(2);
 //            server = server->ice_invocationTimeout(5000);
-            server->push(req, resp);
+            server->send(req, resp);
             cout << resp->sn << "," << resp->deviceCode <<","<< resp->code << endl;
             sleep(1);
         }

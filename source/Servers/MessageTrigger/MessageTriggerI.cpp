@@ -21,13 +21,13 @@ void MessageTiggerAI::reportAsync(::std::shared_ptr<ReportReq> req,
     resp->sn = req->sn;
     response(resp);
 }
-void MessageTiggerBI::pushAsync(::std::shared_ptr<PushReq> req,
-        ::std::function<void(const ::std::shared_ptr<PushResp>& resp)> response,
+void MessageTiggerBI::sendAsync(::std::shared_ptr<SendReq> req,
+        ::std::function<void(const ::std::shared_ptr<SendResp>& resp)> response,
         ::std::function<void(::std::exception_ptr)> exception, const ::Ice::Current& current)
 {
     logSet(current.adapter->getCommunicator(), req->sn);
     logI("req->message=" << req->message);
-    auto resp = std::make_shared<PushResp>();
+    auto resp = std::make_shared<SendResp>();
     resp->code = 0;
     resp->sn = req->sn;
     response(resp);

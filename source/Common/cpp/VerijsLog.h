@@ -10,23 +10,10 @@
 
 #include <Ice/Ice.h>
 #include <thread>
+#include "Common.h"
 
-
-constexpr const char* getFileName(const char* const name)
-{
-    const char* p = name;
-    for(const auto* q = name; *q != '\0'; ++q)
-    {
-        if(*q == '\\' || *q == '/')
-        {
-            p = q;
-        }
-    }
-    return p != name ? ++p : name;
-}
-
-#define _LOG_PREFIX         IceUtil::Time::now().toDateTime() << "|" << std::this_thread::get_id() << "|" << getFileName(__FILE__) << ":" << __LINE__  << "|" << __FUNCTION__ << "|"
-#define _LOG_PREFIX_SN(sn)  IceUtil::Time::now().toDateTime() << "|" << std::this_thread::get_id() << "|" << getFileName(__FILE__) << ":" << __LINE__  << "|" << sn << "|" << __FUNCTION__ << "|"
+#define _LOG_PREFIX         IceUtil::Time::now().toDateTime() << "|" << std::this_thread::get_id() << "|" << Util::getFileName(__FILE__) << ":" << __LINE__  << "|" << __FUNCTION__ << "|"
+#define _LOG_PREFIX_SN(sn)  IceUtil::Time::now().toDateTime() << "|" << std::this_thread::get_id() << "|" << Util::getFileName(__FILE__) << ":" << __LINE__  << "|" << sn << "|" << __FUNCTION__ << "|"
 
 #define _LOG_SN(content, level)\
     do\

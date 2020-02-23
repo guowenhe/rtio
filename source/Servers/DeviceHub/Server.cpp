@@ -26,7 +26,7 @@ public:
             Ice::Error err(communicator()->getLogger());
             if(argc != 1)
             {
-                throw GxError<int>(EXIT_FAILURE, RC::where() + "arguments error");
+                throw GxError<int>(EXIT_FAILURE, Rtio_where() + "arguments error");
             }
 
             auto properties = communicator()->getProperties();

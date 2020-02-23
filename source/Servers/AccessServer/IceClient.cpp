@@ -29,7 +29,7 @@ void AccessServerI::dispatchAsync(::std::shared_ptr<DMS::MessageAReq> req,
         auto session = SessionManager::getInstance()->getSession(req->deviceId);
         if(nullptr == session)
         {
-            throw GxError<RC::Code>(RC::Code::ACCESSSERVER_SESSION_INVALID, RC::where());
+            throw GxError<RC::Code>(RC::Code::ACCESSSERVER_SESSION_INVALID, Rtio_where());
         }
 
         session->dispatch(req->message,
@@ -141,11 +141,12 @@ RetCode IceClient::reportMessage(const std::string& message)
 
     auto req = std::make_shared<DMS::MessageAReq>();
     req->sn = time(NULL);
-    req->message = message; //todo message move
+    req->message = message;
 
     try
     {
         _messageHubAPrx->reportAsync(req, responseHandler, exceptionHandler);
+        return RetCode::UnknowError;
     }
     catch(const std::exception& ex)
     {
@@ -191,7 +192,7 @@ RetCode IceClient::setStatus(const std::string& deviceId, DMS::ClientStatus stat
     {
         log2I(getCommunicator(), "setStatus responseHandler:"<< resp->sn << "," << resp->code);
 //        if(static_cast<RC::Code>(resp->code) == RC::Code::SUCCEED) // todo need modify status server
-        if(resp->code == static_cast<int>(RC::Code::SUCCEED))
+        if(resp->code == static_cast<int>(RC::Code::SUCCESS))
         {
             cb(0);
         }
