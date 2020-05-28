@@ -14,31 +14,31 @@ message("---------------------------------------------------------------------")
 
 if(NOT BUILD_ALL_PROJECT) # start build single project
     include(../../../settings/settings.cmake)
+    set(COMMON_SRC_DIR ${PROJECT_SOURCE_DIR}/../../Common/)
+    include(../../Common/CMakeLists.txt)
     set(SLICE_DIR ${PROJECT_SOURCE_DIR}/../../Slice/)
     include(../../Slice/CMakeLists.txt)
 endif()
 
 include_directories(./)
-include_directories(../../Common/cpp)
+include_directories(../../Common/PublicHeaders)
 include_directories(${PROJECT_BINARY_DIR}/../../Slice/slice/cpp/)
-#include_directories($ENV{BOOST_HOME}/include)
-
 
 aux_source_directory(. SERVER_SRC)
 add_executable(${PROJECT_NAME}-server ${SERVER_SRC})
 target_link_libraries(${PROJECT_NAME}-server
+    common-lib
     slice-gen
     Ice++11
     pthread
 )
-
 # client_sync
-#add_executable(${PROJECT_NAME}-client_sync 
-#  Clients/ClientSync.cpp
-#)
-#target_link_libraries(${PROJECT_NAME}-client_sync
-#    pthread
-#)
+add_executable(${PROJECT_NAME}-client_sync 
+  Clients/ClientSync.cpp
+)
+target_link_libraries(${PROJECT_NAME}-client_sync
+    pthread
+)
 
 install(FILES ${PROJECT_BINARY_DIR}/${PROJECT_NAME}-server 
         PERMISSIONS OWNER_EXECUTE OWNER_READ GROUP_EXECUTE GROUP_READ

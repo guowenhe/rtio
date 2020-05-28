@@ -1,7 +1,7 @@
 #
 # The IceGrid locator proxy.
 #
-Ice.Default.Locator=VerijsGrid/Locator:default -p 12000:default -p 12001:default -p 12002
+Ice.Default.Locator=Grid-001/Locator:default -p 12000:default -p 12001:default -p 12002
 
 
 #
@@ -18,7 +18,7 @@ Ice.Default.Locator=VerijsGrid/Locator:default -p 12000:default -p 12001:default
 # plugin uses multicast to discover IceGrid.
 #
 #Ice.Plugin.IceLocatorDiscovery=IceLocatorDiscovery:createIceLocatorDiscovery
-#IceLocatorDiscovery.InstanceName=VerijsGrid
+#IceLocatorDiscovery.InstanceName=Grid-001
 
 Ice.Default.Timeout=10000
 Ice.Default.Host=localhost

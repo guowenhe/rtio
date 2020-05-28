@@ -1,7 +1,7 @@
 #
 # The IceGrid locator proxy.
 #
-Ice.Default.Locator=VerijsGrid/Locator:default -h localhost -p 12000:default -h localhost -p 12001:default -h localhost -p 12002
+Ice.Default.Locator=Grid-001/Locator:default -h localhost -p 12000:default -h localhost -p 12001:default -h localhost -p 12002
 
 #
 # To use the IceGrid discovery plugin comment out the default locator
@@ -9,7 +9,7 @@ Ice.Default.Locator=VerijsGrid/Locator:default -h localhost -p 12000:default -h 
 # plugin uses multicast to discover IceGrid.
 #
 #Ice.Plugin.IceLocatorDiscovery=IceLocatorDiscovery:createIceLocatorDiscovery
-#IceGrid.InstanceName=VerijsGrid
+#IceGrid.InstanceName=Grid-001
 
 #
 # IceGrid node configuration.

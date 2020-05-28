@@ -48,7 +48,7 @@ int main(int argc, char* argv[])
             return -1;
         }
 
-        auto server = Ice::checkedCast<DMS::MessageHubAPrx>(communicator->stringToProxy("DMS.DeviceHubA"));
+        auto server = Ice::checkedCast<DMS::DeviceHubAPrx>(communicator->stringToProxy("DMS.DeviceHubA"));
         if(!server)
         {
             cerr << "invalid server proxy" << endl;

@@ -10,7 +10,7 @@
 
 #include "MultiWorker.hpp"
 #include "StatusServer.h"
-#include "RedisClient.hpp"
+#include "DeviceRedis.hpp"
 #include "Common.h"
 
 inline Ice::LoggerOutputBase& operator<<(Ice::LoggerOutputBase& out, DMS::ClientStatus status)
@@ -73,7 +73,7 @@ public:
     {
     }
 
-    virtual void processing(MultiWorker::Resource*) override;
+    virtual void run(MultiWorker::Resource*) override;
 
 private:
     ::std::shared_ptr<DMS::SetStatusReq> _req;
@@ -91,7 +91,7 @@ public:
     {
     }
 
-    virtual void processing(MultiWorker::Resource*) override;
+    virtual void run(MultiWorker::Resource*) override;
 
 private:
     ::std::shared_ptr<DMS::QueryStatusReq> _req;

@@ -1,12 +1,14 @@
 #include <Ice/Ice.h>
+#include "RtioLog.h"
 #include "DeviceHubI.h"
-#include "VerijsLog.h"
 #include "DispatchHandler.hpp"
+#include "ReportHandler.hpp"
+
 using namespace DMS;
 
 
 
-int MessageHubAI::addAccessServer(::std::shared_ptr<AccessServerPrx> server, const Ice::Current& current)
+int DeviceHubAI::addAccessServer(::std::shared_ptr<AccessServerPrx> server, const Ice::Current& current)
 {
     log2I(current.adapter->getCommunicator(),
             "identity[" << Ice::identityToString(server->ice_getIdentity()) << "]");
@@ -35,39 +37,47 @@ int MessageHubAI::addAccessServer(::std::shared_ptr<AccessServerPrx> server, con
 
 }
 
-void MessageHubAI::reportAsync(::std::shared_ptr<MessageAReq> req,
+void DeviceHubAI::reportAsync(::std::shared_ptr<MessageAReq> req,
         ::std::function<void(const ::std::shared_ptr<MessageAResp>& resp)> response,
         ::std::function<void(::std::exception_ptr)> exception, const ::Ice::Current& current)
 {
     logSet(current.adapter->getCommunicator(), req->sn);
-    logI("req->message=" << req->message);
-
+    logI("deviceId=" << req->deviceId);
     auto resp = std::make_shared<MessageAResp>();
-    resp->code = 0;
-    resp->sn = req->sn;
-    response(resp);
-
+    try
+    {
+       std::make_shared<ReportHandler>(req, resp, response, current)->report();
+    }
+    catch(std::exception& ex)
+    {
+        logSet(current.adapter->getCommunicator(), req->sn);
+        logE("what=" << ex.what());
+        resp->sn = req->sn;
+        resp->code = RC::codeToInt(RC::Code::FAIL);
+        response(resp);
+    }
 }
 
-void MessageHubBI::dispatchAsync(::std::shared_ptr<MessageBReq> req,
+void DeviceHubBI::dispatchAsync(::std::shared_ptr<MessageBReq> req,
         ::std::function<void(const ::std::shared_ptr<MessageBResp>& resp)> response,
         ::std::function<void(::std::exception_ptr)> exception, const ::Ice::Current& current)
 {
     logSet(current.adapter->getCommunicator(), req->sn);
     logI("req->deviceId=" << req->deviceId);
 
+    auto resp = std::make_shared<MessageBResp>();
+
     // dispatch message
     try
     {
         // check req valid
         // call handler
-        std::make_shared<DispatchHandler>(req, response, current)->processing();
+        std::make_shared<DispatchHandler>(req, resp, response, current)->run();
 
     }
     catch(std::logic_error& ex)
     {
         logE("ex=" << ex.what());
-        ::std::shared_ptr<MessageBResp> resp = std::make_shared<MessageBResp>();
         resp->sn = req->sn;
         resp->code = -2;
         response(resp);
@@ -75,10 +85,8 @@ void MessageHubBI::dispatchAsync(::std::shared_ptr<MessageBReq> req,
     catch(std::exception& ex)
     {
         logE("ex=" << ex.what());
-        ::std::shared_ptr<MessageBResp> resp = std::make_shared<MessageBResp>();
         resp->sn = req->sn;
         resp->code = -1;
         response(resp);
     }
 }
-

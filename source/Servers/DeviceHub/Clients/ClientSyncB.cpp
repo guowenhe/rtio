@@ -29,7 +29,7 @@ int main(int argc, char* argv[])
             return -1;
         }
 
-        auto server = Ice::checkedCast<DMS::MessageHubBPrx>(communicator->stringToProxy("DMS.DeviceHubB"));
+        auto server = Ice::checkedCast<DMS::DeviceHubBPrx>(communicator->stringToProxy("DMS.DeviceHubB"));
         if(!server)
         {
             cerr << "invalid server proxy" << endl;
@@ -48,7 +48,7 @@ int main(int argc, char* argv[])
             server = server->ice_locatorCacheTimeout(2);
 //            server = server->ice_invocationTimeout(5000);
             server->dispatch(req, resp);
-            cout << resp->sn << "," << resp->asCode <<","<< resp->code << endl;
+            cout << resp->sn << "," << resp->deviceCode <<","<< resp->code << endl;
             sleep(1);
         }
 

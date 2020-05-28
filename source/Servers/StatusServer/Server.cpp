@@ -1,30 +1,12 @@
-// **********************************************************************
-//
-// Copyright (c) 2003-2017 ZeroC, Inc. All rights reserved.
-//
-// **********************************************************************
 #include <Ice/Ice.h>
 #include <vector>
-
+#include <RtioLog.h>
+#include "RtioExcept.h"
 #include "ServerGlobal.h"
 #include "StatusServerHandler.h"
 #include "StatusServerI.h"
 
-#include "GxError.hpp"
-
 using namespace DMS;
-
-int ServerGlobal::init(std::shared_ptr<Ice::Communicator> communicator)
-{
-    if(nullptr == communicator)
-    {
-        std::cerr << "ServerGlobal communicator init error" << std::endl;
-        return -1;
-    }
-    _communicator = communicator;
-
-    return 0;
-}
 
 
 class Server: public Ice::Application
@@ -38,11 +20,11 @@ public:
             std::cout << "server start "  << "@" << IceUtil::Time::now().toDateTime() << std::endl;
             if(argc != 1)
             {
-                throw GxError<int>(EXIT_FAILURE, Rtio_where() + "arguments error");
+                throw Rtio::Except<int>(EXIT_FAILURE, Rtio_where() + "arguments error");
             }
             if(ServerGlobal::getInstance()->init(communicator()))
             {
-                throw GxError<int>(EXIT_FAILURE,  Rtio_where() + "ServerGlobal communicator init error");
+                throw Rtio::Except<int>(EXIT_FAILURE,  Rtio_where() + "ServerGlobal communicator init error");
             }
 
             auto properties = communicator()->getProperties();
@@ -53,7 +35,7 @@ public:
             auto workers = std::make_shared<DeviceStatusWorker>(workerNum);
             if(workers->start(config))
             {
-                throw GxError<int>(EXIT_FAILURE, "workers start failed");
+                throw Rtio::Except<int>(EXIT_FAILURE, "workers start failed");
             }
 
             auto adapterName = properties->getProperty("AdapterName");
@@ -64,7 +46,7 @@ public:
             communicator()->waitForShutdown();
             workers->stop();
         }
-        catch(GxError<int>& ex)
+        catch(Rtio::Except<int>& ex)
         {
             log2E(communicator(), ex.what());
             return ex.code();

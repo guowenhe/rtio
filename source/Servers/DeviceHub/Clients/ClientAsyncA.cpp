@@ -8,6 +8,7 @@
 
 #include <Ice/Ice.h>
 #include "DeviceHub.h"
+#include "RemoteCode.h"
 
 using namespace std;
 
@@ -21,7 +22,7 @@ public:
         cout << req->sn << "," << req->message  << endl;
         auto resp = make_shared<DMS::MessageAResp>();
         resp->sn = req->sn;
-        resp->code = 0;
+        resp->code = RC::codeToInt(RC::Code::SUCCESS);
 
         response(resp);
     }
@@ -49,7 +50,7 @@ int main(int argc, char* argv[])
             return -1;
         }
 
-        auto server = Ice::checkedCast<DMS::MessageHubAPrx>(communicator->stringToProxy("DMS.DeviceHubA"));
+        auto server = Ice::checkedCast<DMS::DeviceHubAPrx>(communicator->stringToProxy("DMS.DeviceHubA"));
         if(!server)
         {
             cerr << "invalid server proxy" << endl;

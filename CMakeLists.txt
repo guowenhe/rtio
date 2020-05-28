@@ -14,14 +14,16 @@ message("---------------------------------------------------------------------")
 set(BUILD_ALL_PROJECT "define")  
 include(./settings/settings.cmake)
 
+add_subdirectory(source/Common) 
 add_subdirectory(source/Slice) 
-add_subdirectory(source/Servers/AccessServer) 
+add_subdirectory(source/Servers/APINotifier) 
+add_subdirectory(source/Servers/AccessServerTCP) 
 add_subdirectory(source/Servers/APISender) 
+add_subdirectory(source/Servers/APIManager) 
 add_subdirectory(source/Servers/DeviceHub)
 add_subdirectory(source/Servers/StatusServer)  
-add_subdirectory(source/Servers/MessageTrigger) 
-
-
+add_subdirectory(source/Servers/MessageReporter) 
+add_subdirectory(source/Servers/DeviceManager) 
 
 
 

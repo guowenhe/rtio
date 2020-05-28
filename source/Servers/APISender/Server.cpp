@@ -1,8 +1,7 @@
 
 
+#include <RtioLog.h>
 #include <iostream>
-#include "VerijsLog.h"
-
 #include "IceClient.h"
 #include "Listener.h"
 

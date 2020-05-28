@@ -12,7 +12,7 @@
 #include "Common.h"
 #include "RemoteCode.h"
 #include "StatusServer.h"
-#include "GxError.hpp"
+#include "RtioExcept.h"
 
 namespace DMS
 {
@@ -21,15 +21,16 @@ class DispatchHandler: public std::enable_shared_from_this<DispatchHandler>
 {
 public:
     DispatchHandler(std::shared_ptr<MessageBReq>& req,
+            std::shared_ptr<MessageBResp>& resp,
             ::std::function<void(const ::std::shared_ptr<MessageBResp>& resp)>& response,
-             const ::Ice::Current& current): _req(req), _response(response), _current(current)
+             const ::Ice::Current& current): _req(req), _resp(resp), _response(response), _current(current)
     {
     }
     ~DispatchHandler()
     {
     }
 
-    void processing()
+    void run()
     {
         status();
     }
@@ -45,7 +46,7 @@ public:
             auto status = Ice::uncheckedCast<StatusServerPrx>(proxy);
             if(nullptr == status)
             {
-                throw GxError<RC::Code>(RC::Code::PROXY_INVALID, "status proxy invalid");
+                throw RC_ExceptEx(RC::Code::PROXY_INVALID);
             }
 
             std::shared_ptr<QueryStatusReq> queryStatusReq = std::make_shared<QueryStatusReq>();
@@ -56,7 +57,7 @@ public:
                             std::bind(&DispatchHandler::exception, shared_from_this(), std::placeholders::_1));
 
         }
-        catch(GxError<RC::Code>& ex)
+        catch(RC::Except& ex)
         {
             failed(ex.code(), Rtio_where() + ex.what());
         }
@@ -68,32 +69,38 @@ public:
     void statusResponse(std::shared_ptr<QueryStatusResp> resp)
     {
         logSet(_current.adapter->getCommunicator(), _req->sn);
-        logI("QueryStatusResp code=" << static_cast<RC::Code>(resp->code));
+        logI("QueryStatusResp code=" << RC::intToCode(resp->code));
+        _resp->sn = _req->sn;
         try
         {
-            if(static_cast<RC::Code>(resp->code) != RC::Code::SUCCESS)
+            if(RC::intToCode(resp->code) != RC::Code::SUCCESS)
             {
-                throw GxError<RC::Code>(static_cast<RC::Code>(resp->code), "failed");
+                if(RC::intToCode(resp->code) == RC::Code::STATUSSERVER_DIVICE_NOTFUND)
+                {
+                    _resp->code = RC::codeToInt(RC::Code::DEVICEHUB_DIVICE_NOTFUND);
+                    _response(_resp);
+                    return;
+                }
+                throw RC_ExceptEx(RC::intToCode(resp->code));
             }
             if(resp->accessProxy.empty())
             {
-                throw GxError<RC::Code>(static_cast<RC::Code>(resp->code), "accessProxy is empty string");
+                throw RC_ExceptEx(RC::intToCode(resp->code));
             }
 
+            _resp->deviceStatus = static_cast<int>(resp->status);
             if(resp->status == DMS::ClientStatus::ONLINE)
             {
                 dispatch(resp->accessProxy);
             }
             else
             {
-                auto respB = std::make_shared<MessageBResp>();
-                respB->sn = _req->sn;
-                respB->code = static_cast<int>(RC::Code::DEVICEHUB_DIVICE_NOT_ONLINE);
-                _response(respB);
+                _resp->code = RC::codeToInt(RC::Code::DEVICEHUB_DIVICE_NOT_ONLINE);
+                _response(_resp);
             }
 
         }
-        catch(GxError<RC::Code>& ex)
+        catch(RC::Except& ex)
         {
             failed(ex.code(), Rtio_where() + ex.what());
         }
@@ -115,7 +122,7 @@ public:
 
             if(nullptr == accessServer)
             {
-                throw GxError<RC::Code>(RC::Code::PROXY_INVALID, "accessServer is nullptr");
+                throw RC_ExceptEx(RC::Code::PROXY_INVALID);
             }
 
             auto reqA = std::make_shared<MessageAReq>();
@@ -127,7 +134,7 @@ public:
                     std::bind(&DispatchHandler::dispatchResponse, shared_from_this(), std::placeholders::_1),
                     std::bind(&DispatchHandler::exception, shared_from_this(), std::placeholders::_1));
         }
-        catch(GxError<RC::Code>& ex)
+        catch(RC::Except& ex)
         {
             failed(ex.code(), Rtio_where() + ex.what());
         }
@@ -141,24 +148,23 @@ public:
         try
         {
             logSet(_current.adapter->getCommunicator(),  respA->sn);
-            logI("respA->code="<< static_cast<RC::Code>(respA->code));
+            logI("respA->code="<< RC::intToCode(respA->code));
 
-            if(static_cast<RC::Code>(respA->code) !=  RC::Code::SUCCESS)
+            if(RC::intToCode(respA->code) !=  RC::Code::SUCCESS)
             {
-                if(static_cast<RC::Code>(respA->code) == RC::Code::ACCESSSERVER_TIMEOUT)
+                if(RC::intToCode(respA->code) == RC::Code::ACCESSSERVER_TIMEOUT)
                 {
-                    throw GxError<RC::Code>(RC::Code::DEVICEHUB_DIVICE_AS_TIMEOUT, "accessServer dispatch timeout");
+                    throw RC_ExceptEx(RC::Code::DEVICEHUB_DIVICE_AS_TIMEOUT);
                 }
-                throw GxError<RC::Code>(RC::Code::DEVICEHUB_DIVICE_AS_FAILED, "accessServer dispatch resp code error");
+                throw RC_ExceptEx(RC::Code::DEVICEHUB_DIVICE_AS_FAILED);
             }
-
-            auto respB = std::make_shared<MessageBResp>();
-            respB->sn = respA->sn;
-            respB->asCode = respA->code;
-            respB->code = static_cast<int>(RC::Code::SUCCESS);
-            _response(respB);
+            _resp->sn = respA->sn;
+            _resp->deviceCode = respA->code;
+            _resp->deviceMessage = respA->deviceMessage;
+            _resp->code = RC::codeToInt(RC::Code::SUCCESS);
+            _response(_resp);
         }
-        catch(GxError<RC::Code>& ex)
+        catch(RC::Except& ex)
         {
             failed(ex.code(), Rtio_where() + ex.what());
         }
@@ -184,17 +190,17 @@ public:
     {
         logSet(_current.adapter->getCommunicator(), _req->sn);
         logE("code=" << code << " what=" << what);
-        auto resp = std::make_shared<MessageBResp>();
-        resp->sn = _req->sn;
-        resp->asCode = (code == RC::Code::DEVICEHUB_DIVICE_AS_TIMEOUT) ?
-                        static_cast<int>(RC::Code::ACCESSSERVER_TIMEOUT) : static_cast<int>(RC::Code::FAIL);
-        resp->code = static_cast<int>(code);
-        _response(resp);
+        _resp->sn = _req->sn;
+        _resp->deviceCode = RC::codeToInt((code == RC::Code::DEVICEHUB_DIVICE_AS_TIMEOUT) ?
+                        RC::Code::ACCESSSERVER_TIMEOUT : RC::Code::FAIL);
+        _resp->code = RC::codeToInt(code);
+        _response(_resp);
     }
 
 private:
 
     std::shared_ptr<MessageBReq> _req;
+    std::shared_ptr<MessageBResp> _resp;
     std::function<void(const ::std::shared_ptr<MessageBResp>& resp)> _response;
     Ice::Current _current;
 };

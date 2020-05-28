@@ -2,11 +2,12 @@
 #define __DeviceMessageHubI_h__
 
 #include "DeviceHub.h"
+#include "RemoteCode.h"
 
 namespace DMS
 {
 
-class MessageHubAI: public virtual MessageHubA
+class DeviceHubAI: public virtual DeviceHubA
 {
 public:
 
@@ -16,7 +17,7 @@ public:
             ::std::function<void(::std::exception_ptr)> exception, const ::Ice::Current& current) override;
 };
 
-class MessageHubBI: public virtual MessageHubB
+class DeviceHubBI: public virtual DeviceHubB
 {
 public:
     virtual void dispatchAsync(::std::shared_ptr<MessageBReq> req,

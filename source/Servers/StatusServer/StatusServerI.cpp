@@ -8,7 +8,7 @@
 #include "StatusServerI.h"
 
 #include "StatusServerHandler.h"
-#include "VerijsLog.h"
+#include "RtioLog.h"
 using namespace DMS;
 
 void StatusServerI::setStatusAsync(::std::shared_ptr<SetStatusReq> req,

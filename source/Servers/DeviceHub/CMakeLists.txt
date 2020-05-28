@@ -12,8 +12,16 @@ message("Source Dir                : " ${PROJECT_SOURCE_DIR})
 message("Binary Dir                : " ${PROJECT_BINARY_DIR})
 message("---------------------------------------------------------------------")
 
+if(NOT BUILD_ALL_PROJECT) # start build single project
+    include(../../../settings/settings.cmake)
+    set(COMMON_SRC_DIR ${PROJECT_SOURCE_DIR}/../../Common/)
+    include(../../Common/CMakeLists.txt)
+    set(SLICE_DIR ${PROJECT_SOURCE_DIR}/../../Slice/)
+    include(../../Slice/CMakeLists.txt)
+endif()
+
 include_directories(./)
-include_directories(../../Common/cpp)
+include_directories(../../Common/PublicHeaders)
 include_directories(${PROJECT_BINARY_DIR}/../../Slice/slice/cpp/)
 
 aux_source_directory(. SERVER_SRC)

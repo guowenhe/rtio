@@ -18,7 +18,7 @@ struct HttpRespInfo
     bool keepAlive;
     http::status status;
     std::string body;
-    GlobalResources::SendPara para;
+    GlobalResources::DispatchPara para;
 };
 
 const std::string uriSend("/call/send");
@@ -36,8 +36,8 @@ private:
 	template<class Body, class Allocator>
 	void handleRequest(http::request<Body, http::basic_fields<Allocator>>&& req);
 
-	void responseEx(std::shared_ptr<HttpRespInfo> info, std::shared_ptr<GlobalResources::SendReturn> ret);
-	void response(std::shared_ptr<HttpRespInfo> info, std::shared_ptr<GlobalResources::SendReturn> ret  = nullptr);//, beast::error_code ec, std::size_t);
+	void responseEx(std::shared_ptr<HttpRespInfo> info, std::shared_ptr<GlobalResources::DispatchReturn> ret);
+	void response(std::shared_ptr<HttpRespInfo> info, std::shared_ptr<GlobalResources::DispatchReturn> ret  = nullptr);//, beast::error_code ec, std::size_t);
 
     void doRead();
     void onRead(beast::error_code ec, std::size_t);
@@ -52,7 +52,6 @@ private:
     // The parser is stored in an optional container so we can
     // construct it from scratch it at the beginning of each new message.
     boost::optional<http::request_parser<http::string_body>> _parser;
-    const std::string _serverField = "rtio/0.1";
 };
 
 

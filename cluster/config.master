@@ -1,7 +1,7 @@
 #
 # The IceGrid instance name.
 #
-IceGrid.InstanceName=VerijsGrid
+IceGrid.InstanceName=Grid-001
 
 #
 # IceGrid registry configuration.
@@ -10,8 +10,8 @@ IceGrid.Registry.Client.Endpoints=default -h localhost -p 12000
 IceGrid.Registry.Server.Endpoints=default -h localhost
 IceGrid.Registry.Internal.Endpoints=default -h localhost
 IceGrid.Registry.LMDB.Path=db/master
-IceGrid.Registry.PermissionsVerifier=VerijsGrid/NullPermissionsVerifier
-IceGrid.Registry.AdminPermissionsVerifier=VerijsGrid/NullPermissionsVerifier
+IceGrid.Registry.PermissionsVerifier=Grid-001/NullPermissionsVerifier
+IceGrid.Registry.AdminPermissionsVerifier=Grid-001/NullPermissionsVerifier
 IceGrid.Registry.DefaultTemplates=templates.xml
 Ice.Default.Timeout=10000
 

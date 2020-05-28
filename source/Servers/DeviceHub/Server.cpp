@@ -4,12 +4,10 @@
 //
 // **********************************************************************
 #include <Ice/Ice.h>
-
 #include <vector>
-
+#include <RtioLog.h>
+#include "RtioExcept.h"
 #include "DeviceHubI.h"
-#include "VerijsLog.h"
-#include "GxError.hpp"
 
 using namespace DMS;
 
@@ -26,7 +24,7 @@ public:
             Ice::Error err(communicator()->getLogger());
             if(argc != 1)
             {
-                throw GxError<int>(EXIT_FAILURE, Rtio_where() + "arguments error");
+                throw Rtio::Except<int>(EXIT_FAILURE, Rtio_where() + "arguments error");
             }
 
             auto properties = communicator()->getProperties();
@@ -34,13 +32,13 @@ public:
             auto adapterName = properties->getProperty("AdapterName");
 
             auto adapter = communicator()->createObjectAdapter(adapterName);
-            adapter->add(std::make_shared<MessageHubAI>(), Ice::stringToIdentity(properties->getProperty("IdentityA")));
-            adapter->add(std::make_shared<MessageHubBI>(), Ice::stringToIdentity(properties->getProperty("IdentityB")));
+            adapter->add(std::make_shared<DeviceHubAI>(), Ice::stringToIdentity(properties->getProperty("IdentityA")));
+            adapter->add(std::make_shared<DeviceHubBI>(), Ice::stringToIdentity(properties->getProperty("IdentityB")));
             adapter->activate();
             log2I(communicator(), "server started");
             communicator()->waitForShutdown();
         }
-        catch(GxError<int>& ex)
+        catch(Rtio::Except<int>& ex)
         {
             log2E(communicator(), ex.what());
             return ex.code();

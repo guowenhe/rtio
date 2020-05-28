@@ -10,7 +10,7 @@
 
 
 #include <Ice/Ice.h>
-#include "MessageTrigger.h"
+#include "DeviceHub.h"
 #include "StatusServer.h"
 #include "RemoteCode.h"
 
@@ -95,6 +95,20 @@ struct SendPara
     std::string message;
 };
 
+struct DispatchReturn
+{
+    RC::Code code;
+    int deviceCode;
+    DMS::ClientStatus deviceStatus;
+    std::string deviceMessage;
+};
+struct DispatchPara
+{
+    std::string nonce;
+    std::string deviceId;
+    std::string message;
+};
+
 class IceClient
 {
 private:
@@ -112,16 +126,12 @@ public:
 	}
 
     RetCode init(int argc, char* argv[], const std::string& config);
-    RetCode send(const SendPara& para, std::function<void(std::shared_ptr<SendReturn>)> cb);
-
-//    template<class Send>
-//    RetCode sendCB(const std::string& deviceId, const std::string& sequence, const std::string& message, Send&& send);
-
+    RetCode dispatch(const DispatchPara& para, std::function<void(std::shared_ptr<DispatchReturn>)> cb);
 
 private:
 	Ice::CommunicatorHolder _communicatorHolder;
 	std::shared_ptr<Ice::Communicator> _communicator;
-	std::shared_ptr<DMS::MessageTriggerBPrx> _messageTriggerBPrx;
+    std::shared_ptr<DMS::DeviceHubBPrx> _deviceHubBPrx;
 };
 
 } // GlobalResources

@@ -43,7 +43,9 @@
 ## coredump
 	lz4 -d /var/lib/systemd/coredump/core.APISender-serve.1000.282febd7c891469c8ecbf598615297ca.6153.1581841990000000.lz4 ./core.api
 
-
+## nginx
+	sudo dnf install pcre-devel
+	./configure   --with-stream_ssl_module --with-http_ssl_module --prefix=/home/wenhe/Study/services/nginx1161
 
 
 

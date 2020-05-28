@@ -5,10 +5,10 @@
  *      Author: wenhe
  */
 
-#include "VerijsLog.h"
+#include "RtioLog.h"
+#include "RemoteCode.h"
 #include "ServerGlobal.h"
 #include "StatusServerHandler.h"
-#include "RemoteCode.h"
 
 using namespace DMS;
 namespace Redis = RedisClient;
@@ -42,7 +42,7 @@ void DeviceStatusResource::check()
     }
 }
 
-void SetStatusHandler::processing(MultiWorker::Resource* resource)
+void SetStatusHandler::run(MultiWorker::Resource* resource)
 {
     logSet(_current.adapter->getCommunicator(), _req->sn);
     logI("deviceId=" << _req->deviceId);
@@ -73,7 +73,7 @@ void SetStatusHandler::processing(MultiWorker::Resource* resource)
     _response(resp);
 }
 
-void QueryStatusHandler::processing(MultiWorker::Resource* resource)
+void QueryStatusHandler::run(MultiWorker::Resource* resource)
 {
     logSet(_current.adapter->getCommunicator(), _req->sn);
     logI("deviceId=" << _req->deviceId);

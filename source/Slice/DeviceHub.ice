@@ -12,6 +12,7 @@ module DMS
     {
         int sn;
         int code = -1;
+        string deviceMessage;
     }
     
     class MessageBReq
@@ -23,7 +24,9 @@ module DMS
     class MessageBResp
     {
         int sn;
-        int asCode = -1; // access server return code
+        int deviceStatus;
+        int deviceCode = -1; // device return code
+        string deviceMessage;
         int code = -1;
     } 
     
@@ -32,13 +35,13 @@ module DMS
         ["amd"] void dispatch(MessageAReq req, out MessageAResp resp);
     }
   
-    interface MessageHubA
+    interface DeviceHubA
     {
         int addAccessServer(AccessServer* server);
         // report message, call by access server
         ["amd"] void report(MessageAReq req, out MessageAResp resp);
     }
-    interface MessageHubB
+    interface DeviceHubB
     {
     	// dispatch message to client, call by message router
         ["amd"] void dispatch(MessageBReq req, out MessageBResp resp);        

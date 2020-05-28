@@ -3,6 +3,11 @@ cmake_minimum_required (VERSION 2.8)
 
 if(BUILD_ALL_PROJECT) 
 project(rtio-slice)
+message("---------------------------------------------------------------------")
+message("Project Name              : " ${PROJECT_NAME})
+message("Source Dir                : " ${PROJECT_SOURCE_DIR})
+message("Binary Dir                : " ${PROJECT_BINARY_DIR})
+message("---------------------------------------------------------------------")
 endif()
 
 if(SLICE_DIR)
@@ -14,20 +19,14 @@ endif()
 set(GEN_C_DIR ${PROJECT_BINARY_DIR}/slice/cpp)
 set(GEN_JS_DIR ${PROJECT_BINARY_DIR}/slice/js)
 
-
-#set(GEN_C_DIR ${SLICE_DIR}/../Common/slice/cpp)
-#set(GEN_JS_DIR ${SLICE_DIR}/../Common/slice/js)
-
-# move slice to self project
-#set(GEN_C_DIR ${CMAKE_CURRENT_SOURCE_DIR}/slice-gen/cpp)
-#set(GEN_JS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/slice-gen/js)
-
 #message("slice_dir:" ${SLICE_DIR})
 
 set(SLICE_FILE_LIST 
 DeviceHub
 StatusServer
-MessageTrigger
+MessageReporter
+APINotifier
+DeviceManager
 )
 
 set(GEN_SRC_LIST "")

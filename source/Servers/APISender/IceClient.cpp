@@ -7,9 +7,8 @@
 
 #include "IceClient.h"
 
-#include "VerijsLog.h"
+#include "RtioLog.h"
 #include "RemoteCode.h"
-#include "GxError.hpp"
 #include "Common.h"
 
 using namespace GlobalResources;
@@ -30,13 +29,20 @@ RetCode IceClient::init(int argc, char* argv[], const std::string& config)
 
         log2D(getCommunicator(), "communicator initialed");
 
-        _messageTriggerBPrx = Ice::checkedCast<DMS::MessageTriggerBPrx>(_communicator->propertyToProxy("MessageTriggerBIdentity"));
-        if(!_messageTriggerBPrx)
+//        _messageTriggerBPrx = Ice::checkedCast<DMS::MessageTriggerBPrx>(
+//                _communicator->propertyToProxy("MessageTriggerBIdentity"));
+//        if(!_messageTriggerBPrx)
+//        {
+//            log2D(getCommunicator(), "MessageTrigger server proxy invalid.");
+//            return RetCode::ObjectPrxError;
+//        }
+        _deviceHubBPrx = Ice::checkedCast<DMS::DeviceHubBPrx>(
+                _communicator->propertyToProxy("DeviceHubBIdentity"));
+        if(!_deviceHubBPrx)
         {
-            log2D(getCommunicator(), "server proxy invalid.");
+            log2D(getCommunicator(), "DeviceHub server proxy invalid.");
             return RetCode::ObjectPrxError;
         }
-
     }
     catch(const Ice::FileException& ex)
     {
@@ -58,18 +64,31 @@ RetCode IceClient::init(int argc, char* argv[], const std::string& config)
     return RetCode::Success;
 
 }
-RetCode IceClient::send(const SendPara& para, std::function<void(std::shared_ptr<SendReturn>)> cb)
+
+RetCode IceClient::dispatch(const DispatchPara& para, std::function<void(std::shared_ptr<DispatchReturn>)> cb)
 {
-    const int sn = Util::getSerianNumber();
+    const int sn = logSnGen();
     log2I(getCommunicator(), "deviceId=" << para.deviceId << " nonce=" << para.nonce << " sn=" << sn);
 
-    auto responseHandler = [this, cb](std::shared_ptr<::DMS::SendResp> resp)
+    auto responseHandler = [this, cb](std::shared_ptr<::DMS::MessageBResp> resp)
     {
         log2I(getCommunicator(), "send responseHandler:"<< resp->sn << "," << resp->code);
-        auto ret = std::make_shared<SendReturn>();
-        ret->code = RC::Code::SUCCESS;// static_cast<RC::Code>(resp->code);
+        auto ret = std::make_shared<DispatchReturn>();
+
+        RC::Code retCode = RC::intToCode(resp->code);
+
+        if( retCode != RC::Code::SUCCESS
+                && retCode != RC::Code::DEVICEHUB_DIVICE_NOT_ONLINE)
+        {
+            ret->code = (retCode == RC::Code::DEVICEHUB_DIVICE_NOTFUND)? RC::Code::API_SENDER_DEVICE_NOTFOUND: RC::Code::FAIL;
+            cb(ret);
+            return;
+        }
+
+        ret->code = RC::Code::SUCCESS;
         ret->deviceCode = resp->deviceCode;
-        ret->deviceMessage = "reponse a device message";
+        ret->deviceMessage = resp->deviceMessage;
+        ret->deviceStatus = static_cast<DMS::ClientStatus>(resp->deviceStatus);
         cb(ret);
     };
     auto exceptionHandler = [this, cb](std::exception_ptr ex)
@@ -83,29 +102,28 @@ RetCode IceClient::send(const SendPara& para, std::function<void(std::shared_ptr
         {
             log2I(getCommunicator(), "send exceptionHandler ex=" << ex.what());
 
-            auto ret = std::make_shared<SendReturn>();
+            auto ret = std::make_shared<DispatchReturn>();
             ret->code = RC::Code::FAIL;
             cb(ret);
         }
     };
 
-    auto req = std::make_shared<DMS::SendReq>();
+    auto req = std::make_shared<DMS::MessageBReq>();
     req->sn = sn;
+    req->deviceId = para.deviceId;
     req->message = para.message;
     try
     {
-        _messageTriggerBPrx->sendAsync(req, responseHandler, exceptionHandler);
+        _deviceHubBPrx->dispatchAsync(req, responseHandler, exceptionHandler);
     }
     catch(const std::exception& ex)
     {
-        log2I(getCommunicator(), "send ex=" << ex.what());
+        log2I(getCommunicator(), "device ex=" << ex.what());
         return RetCode::UnknowError;
     }
 
     return RetCode::Success;
 }
-
-
 
 
 

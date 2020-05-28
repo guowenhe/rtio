@@ -5,12 +5,12 @@
  *      Author: szz
  */
 #include "HttpSession.h"
-#include "VerijsLog.h"
+#include "RtioLog.h"
 #include "Json.h"
 #include "Common.h"
 #include "RtioExcept.h"
 
-void HttpSession::responseEx(std::shared_ptr<HttpRespInfo> info, std::shared_ptr<GlobalResources::SendReturn> data)
+void HttpSession::responseEx(std::shared_ptr<HttpRespInfo> info, std::shared_ptr<GlobalResources::DispatchReturn> data)
 {
     // Post our work to the strand, this ensures
     // that the members of `this` will not be
@@ -19,12 +19,13 @@ void HttpSession::responseEx(std::shared_ptr<HttpRespInfo> info, std::shared_ptr
             beast::bind_front_handler(&HttpSession::response, shared_from_this(), info, data));
 }
 
-void HttpSession::response(std::shared_ptr<HttpRespInfo> info, std::shared_ptr<GlobalResources::SendReturn> data)
+void HttpSession::response(std::shared_ptr<HttpRespInfo> info, std::shared_ptr<GlobalResources::DispatchReturn> data)
 {
     http::status status;
     if(data)
     {
-        status = (RC::Code::SUCCESS == data->code) ? http::status::ok : http::status::internal_server_error;
+        status = (RC::Code::SUCCESS == data->code || RC::Code::API_SENDER_DEVICE_NOTFOUND == data->code) ?
+                        http::status::ok : http::status::internal_server_error;
     }
     else
     {
@@ -32,7 +33,7 @@ void HttpSession::response(std::shared_ptr<HttpRespInfo> info, std::shared_ptr<G
     }
 
     auto resp = std::make_shared<http::response<http::string_body>>(status, info->version);
-    resp->set(http::field::server, _serverField);
+    resp->set(http::field::server, RTIO_SERVER_STRING);
     resp->set(http::field::content_type, "text/html");
     resp->keep_alive(info->keepAlive);
 
@@ -40,10 +41,9 @@ void HttpSession::response(std::shared_ptr<HttpRespInfo> info, std::shared_ptr<G
     {
         if(data)
         {
-            //todo add resp json
             Util::json j;
             j["nonce"] = info->para.nonce;
-            j["code"] = static_cast<int>(data->code);
+            j["code"] = RC::codeToInt(data->code);
             j["desc"] = RC::describe(data->code);
             j["device_id"] = info->para.deviceId;
             j["device_status"] = static_cast<int>(data->deviceStatus);
@@ -77,6 +77,8 @@ void HttpSession::handleRequest(http::request<Body, http::basic_fields<Allocator
 
     auto handleError = [this, &info](RC::Code code, const std::string& message)
     {
+        auto *iceClient = GlobalResources::IceClient::getInstance();
+        log2E(iceClient->getCommunicator(), "code="<< code << "message=" << message);
         Util::json j;
         if(!info->para.nonce.empty())
         {
@@ -90,6 +92,7 @@ void HttpSession::handleRequest(http::request<Body, http::basic_fields<Allocator
         }
 
         info->body = j.dump();
+        info->status = http::status::bad_request;
         response(info);
     };
 
@@ -108,7 +111,7 @@ void HttpSession::handleRequest(http::request<Body, http::basic_fields<Allocator
             std::string errorMessage(RC::describe(RC::Code::API_SENDER_JSON_FIELD_INVALID));
             errorMessage += ":";
             errorMessage += field;
-            throw RC::Except(RC::Code::API_SENDER_JSON_FIELD_INVALID, errorMessage, Rtio_where());
+            throw RC::Except(RC::Code::API_SENDER_JSON_FIELD_INVALID, errorMessage);
         }
         if(static_cast<std::string>(j[field]).size() > size)
         {
@@ -116,7 +119,7 @@ void HttpSession::handleRequest(http::request<Body, http::basic_fields<Allocator
             errorMessage += ":";
             errorMessage += field;
             errorMessage += ",exceed limit:";
-            throw RC::Except(RC::Code::API_SENDER_JSON_FIELD_INVALID, errorMessage, Rtio_where());
+            throw RC::Except(RC::Code::API_SENDER_JSON_FIELD_INVALID, errorMessage);
         }
 
         return j[field];
@@ -126,20 +129,17 @@ void HttpSession::handleRequest(http::request<Body, http::basic_fields<Allocator
     {
         if(req.method() != http::verb::post)
         {
-            info->status = http::status::bad_request;
-            throw RC_ExceptWithDesc(RC::Code::API_SENDER_METHOD_ERROR);
+            throw RC::Except(RC::Code::API_SENDER_METHOD_ERROR);
         }
 
         if(req.target().size() != uriSend.size() || req.target() != uriSend)
         {
-            info->status = http::status::bad_request;
-            throw RC_ExceptWithDesc(RC::Code::API_SENDER_URI_INVALID);
+            throw RC::Except(RC::Code::API_SENDER_URI_INVALID);
         }
 
         if(req.body().size() > 3072)
         {
-            info->status = http::status::bad_request;
-            throw RC_ExceptWithDesc(RC::Code::API_SENDER_BODY_INVALID);
+            throw RC::Except(RC::Code::API_SENDER_BODY_INVALID);
         }
 
         int timeLive = 10; // default
@@ -153,17 +153,27 @@ void HttpSession::handleRequest(http::request<Body, http::basic_fields<Allocator
         {
             timeLive = optionTimeLive.second;
         }
-
-        std::function<void(std::shared_ptr<GlobalResources::SendReturn>)> cb =
+        std::function<void(std::shared_ptr<GlobalResources::DispatchReturn>)> cb =
                  std::bind(&HttpSession::responseEx, shared_from_this(), info, std::placeholders::_1);
 
-        auto ret = GlobalResources::IceClient::getInstance()->send(info->para, cb);
+        auto ret = GlobalResources::IceClient::getInstance()->dispatch(info->para, cb);
         if(GlobalResources::RetCode::Success != ret)
         {
-            log2E(GlobalResources::IceClient::getInstance()->getCommunicator(), "send error, ret=" << ret);
+            log2E(GlobalResources::IceClient::getInstance()->getCommunicator(), "dispatch error, ret=" << ret);
             info->status = http::status::internal_server_error;
-            throw RC_ExceptWithDesc(RC::Code::API_SENDER_URI_INVALID);
+
+            throw RC::Except(RC::Code::API_SENDER_DISPATCH_FAIL);
         }
+//        std::function<void(std::shared_ptr<GlobalResources::SendReturn>)> cb =
+//                 std::bind(&HttpSession::responseEx, shared_from_this(), info, std::placeholders::_1);
+//
+//        auto ret = GlobalResources::IceClient::getInstance()->send(info->para, cb);
+//        if(GlobalResources::RetCode::Success != ret)
+//        {
+//            log2E(GlobalResources::IceClient::getInstance()->getCommunicator(), "send error, ret=" << ret);
+//            info->status = http::status::internal_server_error;
+//            throw RC_ExceptWithDesc(RC::Code::API_SENDER_URI_INVALID);
+//        }
     }
     catch(Util::json::parse_error& ex)
     {

@@ -6,9 +6,8 @@
  */
 
 
+#include <RtioLog.h>
 #include "Listener.h"
-
-#include "VerijsLog.h"
 
 #include "HttpSession.h"
 #include "IceClient.h"
