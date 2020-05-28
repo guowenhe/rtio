@@ -3,7 +3,7 @@ RTIO - Real Time Input Output Services for IoT
 
 ![top](./doc/top.PNG)
 
-（如果图片无法显示，github相关服务可能受DNS污染导致，修改本地hosts文件增加相关服务IP即可）
+（如果图片无法显示，可能github相关服务受DNS污染导致，修改本地hosts文件增加相关服务IP即可）
 
 RTIO（Real-Time Input Output）是IoT云平台中的一组服务，可轻松使用 Rest API控制和管理物联网设备，像调用函数一样调用远端设备。
 
