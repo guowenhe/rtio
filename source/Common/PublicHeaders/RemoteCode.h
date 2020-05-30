@@ -26,29 +26,36 @@ enum class Code: int
     SESSION_INVALID     = 1003,
     NOTFOUND            = 1004,
     PROXY_INVALID       = 1005,
+    // api common
+    API_URI_INVALID          = 1600,
+    API_BODY_INVALID         = 1601,
+    API_METHOD_ERROR         = 1602,
+    API_JSON_PARSE_FAIL      = 1603,
+    API_JSON_FIELD_INVALID   = 1604,
+    API_DEVICE_NOTFOUND      = 1605,
 
-    // access server special
+    // access server
     ACCESSSERVER_SESSION_INVALID    = 2000,
     ACCESSSERVER_FAILED             = 2001,
     ACCESSSERVER_TIMEOUT            = 2002,
 
-    // device message hub server special
-    DEVICEHUB_DIVICE_AS_FAILED   = 2100,
+    // device message hub server
+    DEVICEHUB_DIVICE_AS_FAILED    = 2100,
     DEVICEHUB_DIVICE_AS_TIMEOUT   = 2101,
-    DEVICEHUB_DIVICE_NOTFUND   = 2102,
+    DEVICEHUB_DIVICE_NOTFUND      = 2102,
     DEVICEHUB_DIVICE_NOT_ONLINE   = 2103,
 
-    // status server special
+    // status server
     STATUSSERVER_DIVICE_NOTFUND  = 2200, // when query device status
 
     // api sender
-    API_SENDER_URI_INVALID          = 2300,
-    API_SENDER_BODY_INVALID         = 2301,
-    API_SENDER_METHOD_ERROR         = 2302,
-    API_SENDER_JSON_PARSE_FAIL      = 2303,
-    API_SENDER_JSON_FIELD_INVALID   = 2304,
+    API_SENDER_URI_INVALID          = API_URI_INVALID,
+    API_SENDER_BODY_INVALID         = API_BODY_INVALID,
+    API_SENDER_METHOD_ERROR         = API_METHOD_ERROR,
+    API_SENDER_JSON_PARSE_FAIL      = API_JSON_PARSE_FAIL,
+    API_SENDER_JSON_FIELD_INVALID   = API_JSON_FIELD_INVALID,
     API_SENDER_DISPATCH_FAIL        = 2305,
-    API_SENDER_DEVICE_NOTFOUND      = 2306,
+    API_SENDER_DEVICE_NOTFOUND      = API_DEVICE_NOTFOUND,
 
     // api notifier
     API_NOTIFIER_TIMEOUT            = 2400,
@@ -65,13 +72,12 @@ enum class Code: int
     DEVICEMANAGER_KEY_ERROR         = 2603,
 
     // api manage
-    API_MANAGE_URI_INVALID          = 2700,
-    API_MANAGE_BODY_INVALID         = 2701,
-    API_MANAGE_METHOD_ERROR         = 2702,
-    API_MANAGE_JSON_PARSE_FAIL      = 2703,
-    API_MANAGE_JSON_FIELD_INVALID   = 2704,
-    API_MANAGE_DISPATCH_FAIL        = 2705,
-    API_MANAGE_DEVICE_NOTFOUND      = 2706,
+    API_MANAGE_URI_INVALID          = API_URI_INVALID,
+    API_MANAGE_BODY_INVALID         = API_BODY_INVALID,
+    API_MANAGE_METHOD_ERROR         = API_METHOD_ERROR,
+    API_MANAGE_JSON_PARSE_FAIL      = API_JSON_PARSE_FAIL,
+    API_MANAGE_JSON_FIELD_INVALID   = API_JSON_FIELD_INVALID,
+    API_MANAGE_CREATE_DEVICE_FAIL   = 2705,
 
 
 };
@@ -85,24 +91,19 @@ constexpr const char* describe(Code code)
             Code::NOTFOUND == code ?            "NOTFOUND":
             Code::PROXY_INVALID == code ?       "PROXY_INVALID":
 
+            Code::API_URI_INVALID == code ?          "URI_INVALID":
+            Code::API_BODY_INVALID == code ?         "BODY_INVALID":
+            Code::API_METHOD_ERROR == code ?         "METHOD_ERROR":
+            Code::API_JSON_PARSE_FAIL == code ?      "JSON_PARSE_FAIL":
+            Code::API_JSON_FIELD_INVALID == code ?   "JSON_FIELD_INVALID":
+            Code::API_DEVICE_NOTFOUND == code ?       "DEVICE_NOTFOUND ":
+
             Code::MESSAGEREPORTER_REDIS_FAIL == code ?          "MESSAGEREPORTER_REDIS_FAIL":
             Code::MESSAGEREPORTER_TRYING == code ?              "MESSAGEREPORTER_TRYING":
             Code::MESSAGEREPORTER_DEVICEID_INVALID == code ?    "MESSAGEREPORTER_DEVICEID_INVALID":
 
-            Code::API_SENDER_URI_INVALID == code ?          "URI_INVALID":
-            Code::API_SENDER_BODY_INVALID == code ?         "BODY_INVALID":
-            Code::API_SENDER_METHOD_ERROR == code ?         "METHOD_ERROR":
-            Code::API_SENDER_JSON_PARSE_FAIL == code ?      "JSON_PARSE_FAIL":
-            Code::API_SENDER_JSON_FIELD_INVALID == code ?   "JSON_FIELD_INVALID":
             Code::API_SENDER_DISPATCH_FAIL == code ?        "DISPATCH_FAILED ":
-
-            Code::API_MANAGE_URI_INVALID == code ?          "URI_INVALID":
-            Code::API_MANAGE_BODY_INVALID == code ?         "BODY_INVALID":
-            Code::API_MANAGE_METHOD_ERROR == code ?         "METHOD_ERROR":
-            Code::API_MANAGE_JSON_PARSE_FAIL == code ?      "JSON_PARSE_FAI":
-            Code::API_MANAGE_JSON_FIELD_INVALID == code ?   "JSON_FIELD_INVALID":
-            Code::API_MANAGE_DISPATCH_FAIL == code ?        "DISPATCH_FAIL ":
-            Code::API_MANAGE_DEVICE_NOTFOUND == code ?      "DEVICE_NOTFOUND":
+            Code::API_MANAGE_CREATE_DEVICE_FAIL == code ?   "CREATE_DEVICE_FAIL":
                                                             "undefined";
 
 

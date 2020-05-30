@@ -145,10 +145,10 @@ void HttpSession::handleRequest(http::request<Body, http::basic_fields<Allocator
         auto ret = GlobalResources::IceClient::getInstance()->createDevice(info->para, cb);
         if(GlobalResources::RetCode::Success != ret)
         {
-            log2E(GlobalResources::IceClient::getInstance()->getCommunicator(), "dispatch error, ret=" << ret);
+            log2E(GlobalResources::IceClient::getInstance()->getCommunicator(), "createDevice error, ret=" << ret);
             info->status = http::status::internal_server_error;
 
-            throw RC::Except(RC::Code::API_SENDER_DISPATCH_FAIL);
+            throw RC::Except(RC::Code::API_MANAGE_CREATE_DEVICE_FAIL);
         }
     }
     catch(Util::json::parse_error& ex)
