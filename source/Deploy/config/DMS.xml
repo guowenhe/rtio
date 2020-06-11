@@ -8,7 +8,7 @@
          <parameter name="index" default="1"/>
          <parameter name="endpoints" default="default"/>
          <parameter name="workdir" default="APINotifier"/>
-         <server id="${instance-name}-${index}" activation="on-demand" application-distrib="false" exe="${server.distrib}/${workdir}/server" pwd="${server.distrib}/${workdir}">
+         <server id="${instance-name}-${index}" activation="always" application-distrib="false" exe="${server.distrib}/${workdir}/server" pwd="${server.distrib}/${workdir}">
             <properties>
                <property name="Identity" value="${application}.APINotifier"/>
                <property name="AdapterName" value="APINotifier"/>
@@ -30,7 +30,7 @@
          <parameter name="index" default="1"/>
          <parameter name="endpoints" default="default"/>
          <parameter name="workdir" default="DeviceHub"/>
-         <server id="${instance-name}-${index}" activation="on-demand" application-distrib="false" exe="${server.distrib}/${workdir}/server" pwd="${server.distrib}/${workdir}">
+         <server id="${instance-name}-${index}" activation="always" application-distrib="false" exe="${server.distrib}/${workdir}/server" pwd="${server.distrib}/${workdir}">
             <properties>
                <property name="IdentityA" value="${application}.DeviceHubA"/>
                <property name="AdapterName" value="DeviceHub"/>
@@ -53,7 +53,7 @@
          <parameter name="index" default="1"/>
          <parameter name="endpoints" default="default"/>
          <parameter name="workdir" default="DeviceManager"/>
-         <server id="${instance-name}-${index}" activation="on-demand" application-distrib="false" exe="${server.distrib}/${workdir}/server" pwd="${server.distrib}/${workdir}">
+         <server id="${instance-name}-${index}" activation="always" application-distrib="false" exe="${server.distrib}/${workdir}/server" pwd="${server.distrib}/${workdir}">
             <properties>
                <property name="Identity" value="${application}.DeviceManager"/>
                <property name="AdapterName" value="DeviceManager"/>
@@ -77,7 +77,7 @@
          <parameter name="index" default="1"/>
          <parameter name="endpoints" default="default"/>
          <parameter name="workdir" default="MessageReporter"/>
-         <server id="${instance-name}-${index}" activation="on-demand" application-distrib="false" exe="${server.distrib}/${workdir}/server" pwd="${server.distrib}/${workdir}">
+         <server id="${instance-name}-${index}" activation="always" application-distrib="false" exe="${server.distrib}/${workdir}/server" pwd="${server.distrib}/${workdir}">
             <properties>
                <property name="Identity" value="${application}.MessageReporter"/>
                <property name="AdapterName" value="MessageReporter"/>
@@ -97,33 +97,12 @@
             <adapter name="MessageReporter" endpoints="default" id="${server}.MessageReporter" replica-group="MessageReporterGroup"/>
          </server>
       </server-template>
-      <server-template id="MessageTrigger">
-         <parameter name="instance-name" default="${application}.MessageTrigger"/>
-         <parameter name="index" default="1"/>
-         <parameter name="endpoints" default="default"/>
-         <parameter name="workdir" default="MessageTrigger"/>
-         <server id="${instance-name}-${index}" activation="on-demand" application-distrib="false" exe="${server.distrib}/${workdir}/server" pwd="${server.distrib}/${workdir}">
-            <properties>
-               <property name="IdentityA" value="${application}.MessageTriggerA"/>
-               <property name="AdapterName" value="MessageTrigger"/>
-               <property name="IdentityB" value="${application}.MessageTriggerB"/>
-               <property name="Ice.StdOut" value="${logpath}/${server}.stdout"/>
-               <property name="Ice.StdErr" value="${logpath}/${server}.stderr"/>
-               <property name="Ice.Default.InvocationTimeout" value="5000"/>
-            </properties>
-            <log path="${logpath}/${server}.log" property="Ice.LogFile"/>
-            <distrib icepatch="Facilities.IcePatch2/server">
-               <directory>${workdir}</directory>
-            </distrib>
-            <adapter name="MessageTrigger" endpoints="default" id="${server}.MessageTrigger" replica-group="MessageTriggerGroup"/>
-         </server>
-      </server-template>
       <server-template id="StatusServer">
          <parameter name="instance-name" default="${application}.StatusServer"/>
          <parameter name="index" default="1"/>
          <parameter name="endpoints" default="default"/>
          <parameter name="workdir" default="StatusServer"/>
-         <server id="${instance-name}-${index}" activation="on-demand" application-distrib="false" exe="${server.distrib}/${workdir}/server" pwd="${server.distrib}/${workdir}">
+         <server id="${instance-name}-${index}" activation="always" application-distrib="false" exe="${server.distrib}/${workdir}/server" pwd="${server.distrib}/${workdir}">
             <properties>
                <property name="Identity" value="${application}.StatusServer"/>
                <property name="AdapterName" value="StatusServer"/>
@@ -157,11 +136,6 @@
          <load-balancing type="random" n-replicas="0"/>
          <object identity="${application}.MessageReporter" type="DMS::MessageReporter"/>
       </replica-group>
-      <replica-group id="MessageTriggerGroup">
-         <load-balancing type="random" n-replicas="0"/>
-         <object identity="${application}.MessageTriggerA" type="DMS::MessageTrigger"/>
-         <object identity="${application}.MessageTriggerB" type="DMS::MessageTrigger"/>
-      </replica-group>
       <replica-group id="StatusServerGroup">
          <load-balancing type="random" n-replicas="0"/>
          <object identity="${application}.StatusServer" type="DMS::StatusServer"/>
@@ -172,7 +146,6 @@
          <server-instance template="DeviceHub"/>
          <server-instance template="DeviceManager"/>
          <server-instance template="MessageReporter"/>
-         <server-instance template="MessageTrigger"/>
          <server-instance template="StatusServer"/>
       </node>
       <node name="node2">
