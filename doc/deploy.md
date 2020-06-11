@@ -52,10 +52,12 @@ make PREFIX=/dir/to/install/ install
 ```
 sudo dnf install pcre-devel
 ./configure --with-stream  --with-stream_ssl_module --with-http_ssl_module --prefix=/dir/to/install/
+make
+make install
 ```
 
 ## 编译rtio服务
-如果以下组件，没有安装在默认目录，需要设定以下环境变量，指向安装目录。
+如果以下组件，没有安装在系统默认目录，需要设定以下环境变量，指向安装目录。
 ```
 export set BOOST_HOME=/dir/to/boost
 export set HI_REDIS=/dir/to/hiredis
@@ -98,7 +100,7 @@ Install the project...
 
 ### 启动nginx服务
 
-切换到nginx安装目录，修改转发配置ssl转发。
+切换到nginx安装目录，修改配置。
 
 ```
     server {
@@ -166,7 +168,7 @@ copy independent servers
 ```
 运行非ice管理的程序（后续考虑自动启动）：
 ```
-cd ../../cluster/independent/ #切到cluster中
+cd ../../cluster/independent/
 cd AccessServerTCP
 ./server access-server-tcp.config &
 cd ../APIManager/
@@ -174,6 +176,6 @@ cd ../APIManager/
 cd ../APISender/
 /server api-sender.config &
 ```
-查看各个服务日志，“server started”字样表示该服务已启动。
+在“cluster/logs”中查看各个服务日志，有“server started”字样表示该服务已启动。
 
 
