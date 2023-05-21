@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+option go_package = "rtio2/pkg/rpcproto/resource";
+package resource;
+
+
+service ResourceService {
+  rpc Get (Req) returns (Resp) {}
+  rpc Post (Req) returns (Resp) {}
+}
+
+enum Code {
+  CODE_INTERNAL_SERVER_ERROR = 0;
+  CODE_OK = 1;
+  CODE_DEVICEID_OFFLINE = 2;
+  CODE_DEVICEID_TIMEOUT = 3;
+  CODE_CONTINUE = 4;
+  CODE_TERMINATE = 5;
+  CODE_NOT_FOUNT = 6;
+  CODE_BAD_REQUEST = 7;
+  CODE_METHOD_NOT_ALLOWED = 8;
+  CODE_TOO_MANY_REQUESTS = 9;
+  CODE_TOO_MANY_OBSERVATIONS = 10;
+}
+
+
+message Req {
+    uint32 id = 1;
+    string device_id = 2;
+    bytes data = 3;
+}
+message Resp {
+  uint32 id = 1;
+  Code code = 2;
+  bytes data = 3;
+}

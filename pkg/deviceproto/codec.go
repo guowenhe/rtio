@@ -1,0 +1,344 @@
+/*
+*
+* Copyright 2023 RTIO authors.
+* 
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+* 
+*      http://www.apache.org/licenses/LICENSE-2.0
+* 
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+* 
+*/
+
+package deviceproto
+
+import (
+	"bytes"
+	"errors"
+)
+
+type MsgType uint8
+
+const (
+	MsgType_UnknownType    MsgType = 0
+	MsgType_DeviceAuthReq  MsgType = 1
+	MsgType_DeviceAuthResp MsgType = 2
+	MsgType_DevicePingReq  MsgType = 3
+	MsgType_DevicePingResp MsgType = 4
+	MsgType_DeviceSendReq  MsgType = 5
+	MsgType_DeviceSendResp MsgType = 6
+	MsgType_ServerSendReq  MsgType = 7
+	MsgType_ServerSendResp MsgType = 8
+)
+
+func (t MsgType) String() string {
+	switch t {
+	case MsgType_UnknownType:
+		return "MsgType_UnknownType"
+	case MsgType_DeviceAuthReq:
+		return "MsgType_DeviceAuthReq"
+	case MsgType_DeviceAuthResp:
+		return "MsgType_DeviceAuthResp"
+	case MsgType_DevicePingReq:
+		return "MsgType_DevicePingReq"
+	case MsgType_DevicePingResp:
+		return "MsgType_DevicePingResp"
+	case MsgType_DeviceSendReq:
+		return "MsgType_DeviceSendReq"
+	case MsgType_DeviceSendResp:
+		return "MsgType_DeviceSendResp"
+	case MsgType_ServerSendReq:
+		return "MsgType_ServerSendReq"
+	case MsgType_ServerSendResp:
+		return "MsgType_ServerSendResp"
+	default:
+	}
+	return "Code_UndefineError"
+}
+
+var (
+	ErrUnkown       = errors.New("ErrUnkown")
+	ErrExceedLength = errors.New("ErrExceedLength")
+	ErrNotEnought   = errors.New("ErrNotEnought")
+	ErrEncode       = errors.New("ErrEncode")
+	ErrDecode       = errors.New("ErrDecode")
+	ErrNetRead      = errors.New("ErrNetRead")
+	ErrNetWrite     = errors.New("ErrNetWrite")
+	ErrAuthData     = errors.New("ErrAuthData")
+	ErrCapLevel     = errors.New("ErrCapLevel")
+	ErrHeaderNil    = errors.New("ErrHeaderNil")
+)
+
+const (
+	HeaderLen          uint16 = 5
+	Version            uint8  = 0
+	DeviceIDLen        uint16 = 36
+	DeviceSecretLenMin uint16 = 24
+	DeviceSecretLenMax uint16 = 64
+)
+
+var (
+	capLevelToSize = []uint16{512, 1024, 2048, 4096}
+)
+
+// decode step：1.decode header first 2.decode body
+// encode step：1.encode body first 2. encode header
+
+type Header struct {
+	Version uint8
+	Type    MsgType
+	ID      uint16
+	BodyLen uint16
+	Code    RemoteCode
+}
+
+type AuthReq struct {
+	Header       *Header
+	CapLevel     uint8
+	DeviceID     string
+	DeviceSecret string
+}
+
+type AuthResp struct {
+	Header *Header
+}
+type PingReq struct {
+	Header *Header
+}
+type PingResp struct {
+	Header *Header
+}
+type SendReq struct {
+	Header *Header
+	Body   []byte
+}
+type SendResp struct {
+	Header *Header
+	Body   []byte
+}
+
+func GetCapSize(level uint8) (uint16, error) {
+
+	if level > 3 {
+		return 0, ErrCapLevel
+	}
+	return capLevelToSize[level], nil
+}
+
+func DecodeHeader(buf []byte) (*Header, error) {
+	if len(buf) < int(HeaderLen) {
+		return nil, ErrNotEnought
+	}
+	h := new(Header)
+	h.Type = MsgType((buf[0] >> 4) & 0x0F)
+	h.Version = (buf[0] >> 3) & 0x01
+	h.Code = RemoteCode(buf[0] & 0x07)
+	h.ID = (uint16(buf[1]) << 8) + uint16(buf[2])
+	h.BodyLen = (uint16(buf[3]) << 8) + uint16(buf[4])
+	if h.BodyLen > capLevelToSize[3] {
+		return nil, ErrExceedLength
+	}
+	return h, nil
+}
+func EncodeHeader(h *Header, buf []byte) error {
+	if len(buf) < int(HeaderLen) {
+		return ErrNotEnought
+	}
+	buf[0] = ((uint8(h.Type) << 4) & 0xF0) + ((h.Version << 3) & 0x80) + (uint8(h.Code) & 0x07)
+	buf[1] = uint8(h.ID>>8) & 0xFF      //msb
+	buf[2] = uint8(h.ID) & 0xFF         //lsb
+	buf[3] = uint8(h.BodyLen>>8) & 0xFF //msb
+	buf[4] = uint8(h.BodyLen) & 0xFF    //lsb
+	return nil
+}
+
+func DecodeAuthReq(buf []byte) (*AuthReq, error) {
+	if len(buf) < int(HeaderLen+DeviceIDLen+DeviceSecretLenMin+1) {
+		return nil, ErrNotEnought
+	}
+	if len(buf) > int(HeaderLen+1+DeviceIDLen+1+DeviceSecretLenMax) {
+		return nil, ErrExceedLength
+	}
+	header, err := DecodeHeader(buf)
+	if err != nil {
+		return nil, err
+	}
+	req := new(AuthReq)
+	req.Header = header
+	req.CapLevel = (buf[HeaderLen] >> 6) & 0x03
+	bufAuth := buf[HeaderLen+1:]
+
+	if p := bytes.Index(bufAuth, []byte(":")); p != -1 {
+		deviceIDLen := p
+		deviceSecretLen := len(bufAuth[p+1:])
+		if deviceIDLen != int(DeviceIDLen) ||
+			deviceSecretLen < int(DeviceSecretLenMin) ||
+			deviceSecretLen > int(DeviceSecretLenMax) {
+			return nil, ErrAuthData
+		}
+		req.DeviceID = string(bufAuth[0:p])
+		req.DeviceSecret = string(bufAuth[p+1:])
+	} else {
+		return nil, ErrAuthData
+	}
+	return req, nil
+}
+func DecodeAuthReqBody(header *Header, buf []byte) (*AuthReq, error) {
+	if nil == header {
+		return nil, ErrHeaderNil
+	}
+
+	if len(buf) < int(DeviceIDLen+DeviceSecretLenMin+1) {
+		return nil, ErrNotEnought
+	}
+	if len(buf) > int(1+DeviceIDLen+1+DeviceSecretLenMax) {
+		return nil, ErrExceedLength
+	}
+
+	req := new(AuthReq)
+	req.Header = header
+	req.CapLevel = (buf[0] >> 6) & 0x03
+	bufAuth := buf[1:]
+
+	if p := bytes.Index(bufAuth, []byte(":")); p != -1 {
+		deviceIDLen := p
+		deviceSecretLen := len(bufAuth[p+1:])
+		if deviceIDLen != int(DeviceIDLen) ||
+			deviceSecretLen < int(DeviceSecretLenMin) ||
+			deviceSecretLen > int(DeviceSecretLenMax) {
+			return nil, ErrAuthData
+		}
+		req.DeviceID = string(bufAuth[0:p])
+		req.DeviceSecret = string(bufAuth[p+1:])
+	} else {
+		return nil, ErrAuthData
+	}
+	return req, nil
+}
+func EncodeAuthReq(req *AuthReq) ([]byte, error) {
+	authData := req.DeviceID + ":" + req.DeviceSecret
+	bodyLen := len(authData) + 1
+
+	if bodyLen < int(1+DeviceIDLen+1+DeviceSecretLenMin) ||
+		bodyLen > int(1+DeviceIDLen+1+DeviceSecretLenMax) {
+		return nil, ErrAuthData
+	}
+	buf := make([]byte, int(HeaderLen)+bodyLen)
+	buf[HeaderLen] = (req.CapLevel << 6) & 0xc0
+	copy(buf[HeaderLen+1:], authData)
+	req.Header.BodyLen = uint16(bodyLen)
+	if err := EncodeHeader(req.Header, buf); err != nil {
+		return nil, err
+	}
+	return buf, nil
+}
+func DecodeAuthResp(buf []byte) (*AuthResp, error) {
+	header, err := DecodeHeader(buf)
+	if err != nil {
+		return nil, err
+	}
+	resp := new(AuthResp)
+	resp.Header = header
+	return resp, nil
+}
+func EncodeAuthResp(resp *AuthResp) ([]byte, error) {
+	buf := make([]byte, int(HeaderLen))
+	if err := EncodeHeader(resp.Header, buf); err != nil {
+		return nil, err
+	}
+	return buf, nil
+}
+
+func DecodePingReq(buf []byte) (*PingReq, error) {
+	req := new(PingReq)
+	return req, nil
+}
+func EncodePingReq(req *PingReq, buf []byte) (uint16, error) {
+	bodyLen := 2
+	if len(buf) < bodyLen {
+		return 0, ErrNotEnought
+	}
+	// buf[0] = (req.capLevel << 6) & 0xc0
+	// copy(buf[1:], bodyLen)
+	return uint16(bodyLen), nil
+}
+func DecodePingResp(buf []byte) (*PingResp, error) {
+
+	req := new(PingResp)
+
+	return req, nil
+}
+func EncodePingResp(req *PingResp, buf []byte) (uint16, error) {
+	bodyLen := 2
+	if len(buf) < bodyLen {
+		return 0, ErrNotEnought
+	}
+	// buf[0] = (req.capLevel << 6) & 0xc0
+	// copy(buf[1:], bodyLen)
+	return uint16(bodyLen), nil
+}
+
+func DecodeSendReq(buf []byte) (*SendReq, error) {
+	header, err := DecodeHeader(buf)
+	if err != nil {
+		return nil, err
+	}
+	req := new(SendReq)
+	req.Header = header
+	req.Body = buf[HeaderLen : HeaderLen+req.Header.BodyLen]
+	return req, nil
+}
+func DecodeSendReqBody(header *Header, buf []byte) (*SendReq, error) {
+	if nil == header {
+		return nil, ErrHeaderNil
+	}
+	req := new(SendReq)
+	req.Header = header
+	req.Body = buf
+	return req, nil
+}
+func EncodeSendReq(req *SendReq) ([]byte, error) {
+	bodyLen := len(req.Body)
+	req.Header.BodyLen = uint16(bodyLen)
+	buf := make([]byte, int(HeaderLen)+bodyLen)
+	if err := EncodeHeader(req.Header, buf); err != nil {
+		return nil, err
+	}
+	copy(buf[HeaderLen:], req.Body)
+	return buf, nil
+}
+func DecodeSendResp(buf []byte) (*SendResp, error) {
+	header, err := DecodeHeader(buf)
+	if err != nil {
+		return nil, err
+	}
+	resp := new(SendResp)
+	resp.Header = header
+	resp.Body = buf[HeaderLen : HeaderLen+resp.Header.BodyLen]
+	return resp, nil
+}
+func DecodeSendRespBody(header *Header, buf []byte) (*SendResp, error) {
+	if nil == header {
+		return nil, ErrHeaderNil
+	}
+	resp := new(SendResp)
+	resp.Header = header
+	resp.Body = buf
+	return resp, nil
+}
+func EncodeSendResp(resp *SendResp) ([]byte, error) {
+	bodyLen := len(resp.Body)
+	resp.Header.BodyLen = uint16(bodyLen)
+	buf := make([]byte, int(HeaderLen)+bodyLen)
+	if err := EncodeHeader(resp.Header, buf); err != nil {
+		return nil, err
+	}
+	copy(buf[HeaderLen:], resp.Body)
+	return buf, nil
+}

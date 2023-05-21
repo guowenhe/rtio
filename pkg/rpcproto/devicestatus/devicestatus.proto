@@ -1,0 +1,51 @@
+syntax = "proto3";
+
+option go_package = "rtio2/pkg/rpcproto/devicestatus";
+package devicestatus;
+
+enum Status {
+  STATUS_UNKNOW = 0;
+  STATUS_ONLINE = 1;
+  STATUS_OFFLINE = 2;
+}
+
+enum Code {
+  CODE_UNKNOW = 0;
+  CODE_SUCCESS = 1;
+  CODE_FAIL = 2;
+  CODE_DEVICEID_INVALAID = 3;
+  CODE_STATUS_INVALAID = 4;
+  CODE_ACCESSID_INVALAID = 5;
+}
+
+
+service StatusService {
+  rpc GetHost (GetHostReq) returns (GetHostResp) {}
+  rpc GetStatus (GetStatusReq) returns (GetStatusResp) {}
+  rpc SetStatus (SetStatusReq) returns (SetStatusResp) {}
+}
+
+message GetHostReq {
+}
+message GetHostResp {
+  string host = 1;
+}
+
+message GetStatusReq {
+  string device_id  = 1;
+}
+message GetStatusResp {
+  Status status = 1;
+  int32 access_id = 2;
+  Code code = 3;
+}
+
+message SetStatusReq {
+  string device_id  = 1;
+  Status status = 2;
+  int32 access_id = 3;
+}
+message SetStatusResp {
+  Code code = 1;
+}
+

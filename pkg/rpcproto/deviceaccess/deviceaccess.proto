@@ -1,0 +1,52 @@
+syntax = "proto3";
+
+option go_package = "rtio2/pkg/rpcproto/deviceaccess";
+package deviceaccess;
+
+
+service AccessService {
+  rpc Post (Req) returns (Resp) {}
+  rpc Get (Req) returns (Resp) {}
+  rpc ObGet (ObGetReq) returns (stream ObGetResp) {}
+}
+
+
+enum Code {
+  CODE_INTERNAL_SERVER_ERROR = 0;
+  CODE_OK = 1;
+  CODE_DEVICEID_OFFLINE = 2;
+  CODE_DEVICEID_TIMEOUT = 3;
+  CODE_CONTINUE = 4;
+  CODE_TERMINATE = 5;
+  CODE_NOT_FOUNT = 6;
+  CODE_BAD_REQUEST = 7;
+  CODE_METHOD_NOT_ALLOWED = 8;
+  CODE_TOO_MANY_REQUESTS = 9;
+  CODE_TOO_MANY_OBSERVATIONS = 10;
+  CODE_REQUEST_TIMEOUT= 11;
+}
+
+message Req {
+  uint32 id = 1;
+  string device_id =2;
+  string uri = 3;
+  bytes data = 4;
+}
+message Resp {
+uint32 id = 1;
+Code code = 2;
+bytes data = 3;
+}
+
+message ObGetReq {
+  uint32 id = 1;
+  string device_id =2;
+  string uri = 3;
+  bytes data = 4;
+}
+message ObGetResp {
+  uint32 id = 1;
+  uint32 fid = 2; // frame id
+  Code code = 3;
+  bytes data = 4;
+}
