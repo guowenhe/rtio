@@ -1,7 +1,4 @@
-/build/
-.externalToolBuilders
-.settings
-.project
-.cproject
-
-
+*.pb.go
+*.log
+/out/
+/go.work

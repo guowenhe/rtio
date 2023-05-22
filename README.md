@@ -4,7 +4,7 @@ RTIO结合Rest（Rest-Like）模型实现物联网设备与云端通信，与MQT
 
 ## 为什么创建RTIO
 
-RTIO提供端到端的解决方案，简化设备接入云端开发。设备也是服务资源的提供者，RTIO采取Rest-Like模型，使设备接开发具有和WEB服务开发相似的体验和高效。主要有以下优势：
+RTIO提供端到端的解决方案，简化设备接入云端开发。设备也是服务资源的提供者，RTIO采取Rest-Like模型，使设备端开发具有和WEB服务开发相似的体验和高效。主要有以下优势：
 
 - 以URI标识不同资源或能力，比如设备提供V2/V3接口，方便设备资源或能力迭代
 - 通过GET、POST和ObGet（Observe-GET）等方法交互，流程更简单（相比MQTT减少一半以上交互，可参考FQA部分）
@@ -22,6 +22,8 @@ RTIO交互示例可参考下文“RTIO和MQTT服务交互比较”。
 - 用户端接入采用http和webscocket
 
 ## 安装和运行
+
+(完善中...)
 
 ## 集成示例
 
@@ -60,6 +62,8 @@ func handerStatus(ctx context.Context, req []byte) (<-chan []byte, error) {
  deviceSession.RegisterObGetHandler(0x781495e7, handerStatus)
 
 ```
+
+注：GET/POST每次交互都带有URI标识，为压缩URI数据量，交互过程采用4字节的哈希摘要（CRC32）进行通信。
 
 用户接入端代码，post命令：
 
@@ -123,7 +127,7 @@ resp: print started
 
 ```
 
-### 运行
+<!-- ### 运行 -->
 
 <!-- ### docker安装 -->
 
