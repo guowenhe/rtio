@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta charset="UTF-8" />
+    <title> RTIO Demo </title>
+    <h2>RTIO Demo: Printer Remote Control Simulation </h2>
+</head>
+
+<body>
+    <div>
+        <label for="bt_start">start</label>
+        <button id="bt_start" class="bt_start"> >| </button>
+    </div>
+    <div>
+        <label for="ob_pg">progress</label>
+        <progress id="ob_pg" class="ob_pg" max="100" value="0"> </progress>
+        <output name="result" for="ob_pg"></output>
+    </div>
+    <br>
+    <div>
+        <label for="logs">run logs<br /></label>
+        <textarea id="logs" rows="32" cols="48" readonly></textarea>
+    </div>
+
+    <script type="text/javascript">
+        var bt_start = document.getElementById("bt_start");
+        bt_start.style.color = 'green';
+
+        function logShow(log) {
+            var t = document.getElementById("logs");
+            t.value = t.value + log + '\n'
+            t.scrollTop = t.scrollHeight
+        }
+
+        async function* makeTextFileLineIterator(url) {
+            const utf8Decoder = new TextDecoder("utf-8");
+            const response = await fetch(url);
+            const reader = response.body.getReader();
+            let { value: chunk, done: readerDone } = await reader.read();
+            chunk = chunk ? utf8Decoder.decode(chunk) : "";
+
+            const newline = /\r?\n/gm;
+            let startIndex = 0;
+            let result;
+
+            while (true) {
+                const result = newline.exec(chunk);
+                if (!result) {
+                    if (readerDone) break;
+                    const remainder = chunk.substr(startIndex);
+                    ({ value: chunk, done: readerDone } = await reader.read());
+                    chunk = remainder + (chunk ? utf8Decoder.decode(chunk) : "");
+                    startIndex = newline.lastIndex = 0;
+                    continue;
+                }
+                yield chunk.substring(startIndex, result.index);
+                startIndex = newline.lastIndex;
+            }
+
+            if (startIndex < chunk.length) {
+                // Last line didn't end in a newline char
+                yield chunk.substr(startIndex);
+            }
+        }
+
+        async function observe() {
+            var pg = document.getElementById("ob_pg");
+
+            logShow('\nGET Status From Device as A Stream')
+            logShow('URL: http://101.200.39.65:17317/cfa09baa-4913-4ad7-a936-2e26f9671b04/obget_handler?uri=%2Fprinter%2Fstatus&id=12334"')
+
+            for await (const line of makeTextFileLineIterator("http://101.200.39.65:17317/cfa09baa-4913-4ad7-a936-2e26f9671b04/obget_handler?uri=%2Fprinter%2Fstatus&id=12334")) {
+                console.log(line);
+                const jsonObj = JSON.parse(line);
+                if (!jsonObj.hasOwnProperty("result")) {
+                    console.log("Stream Error", line);
+                    return
+                }
+                logShow("RESP: " + JSON.stringify(jsonObj["result"]))
+                if (jsonObj["result"]["code"] != "CODE_CONTINUE") {
+                    bt_start.style.color = 'green';
+                }
+                const data = atob(jsonObj["result"]["data"])
+                if (data.length != 0) {
+                    console.log(data);
+                    logShow("RESP data: " + data)
+                    pg.value = data.replace(/[^0-9]/ig, '')
+                }
+            }
+        }
+
+        bt_start.onclick = function () {
+            if (bt_start.style.color == 'red') {
+                console.log("click invalid");
+                logShow("click invalid")
+                return;
+            }
+            console.log("click and start...");
+            bt_start.style.color = 'red';
+            
+            logShow("\nPOST To Device")
+            logShow("URL: http://101.200.39.65:17317/cfa09baa-4913-4ad7-a936-2e26f9671b04/post_handler")
+            logShow('BODY: {"uri":"/printer/action","id":12667,"data":"c3RhcnQ="}"')
+            logShow('BODY data: start')
+
+            fetch('http://101.200.39.65:17317/cfa09baa-4913-4ad7-a936-2e26f9671b04/post_handler', {
+                method: 'POST',
+                body: '{"uri":"/printer/action","id":12667,"data":"c3RhcnQ="}'
+            })
+                .then(response => response.json())
+                .then(data => {
+                    console.log(data);
+                    logShow('RESP: ' + JSON.stringify(data))
+                    observe();
+                });            
+        }
+
+        window.onload = (event) => {
+            console.log('page loaded, observing');
+            observe();
+        };
+    </script>
+</body>
+
+</html>

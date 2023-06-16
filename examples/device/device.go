@@ -1,25 +1,27 @@
 /*
 *
 * Copyright 2023 RTIO authors.
-* 
+*
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
 * You may obtain a copy of the License at
-* 
+*
 *      http://www.apache.org/licenses/LICENSE-2.0
-* 
+*
 * Unless required by applicable law or agreed to in writing, software
 * distributed under the License is distributed on an "AS IS" BASIS,
 * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 * See the License for the specific language governing permissions and
 * limitations under the License.
-* 
-*/
+*
+ */
 
 package main
 
 import (
+	"bytes"
 	"context"
+	"flag"
 	"net"
 	"os/signal"
 	ds "rtio2/internal/access/access_client/devicesession"
@@ -28,13 +30,41 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"periph.io/x/conn/v3/gpio"
+	"periph.io/x/conn/v3/gpio/gpioreg"
+	"periph.io/x/host/v3"
 )
 
 var logger log.Logger
 
+var printProgress = 0
+
 func handlerAction(req []byte) ([]byte, error) {
 	logger.Info().Str("req", string(req)).Msg("")
-	return []byte("print started"), nil
+	printProgress = 0
+	resp := []byte("unknown cmd")
+
+	if bytes.Equal(req, []byte("start")) {
+		resp = []byte("print started")
+		go func() {
+			host.Init()
+			p := gpioreg.ByName("GPIO7")
+			t := time.NewTicker(300 * time.Millisecond)
+			for l := gpio.High; ; l = !l {
+				p.Out(l)
+				<-t.C
+				printProgress = printProgress + 1
+				logger.Info().Int("progress", printProgress).Msg("printing")
+				if printProgress >= 100 {
+					p.Out(gpio.Low)
+					break
+				}
+			}
+		}()
+	}
+
+	return resp, nil
 }
 
 func handerStatus(ctx context.Context, req []byte) (<-chan []byte, error) {
@@ -46,8 +76,10 @@ func handerStatus(ctx context.Context, req []byte) (<-chan []byte, error) {
 			close(respChan)
 			logger.Info().Msg("Observer exit")
 		}()
-		t := time.NewTicker(time.Second * 2)
-		i := 0
+
+		respChan <- []byte("printing " + strconv.Itoa(printProgress) + "%") // report first, not wait for timer
+
+		t := time.NewTicker(time.Second * 1)
 		defer t.Stop()
 		for {
 			select {
@@ -56,11 +88,11 @@ func handerStatus(ctx context.Context, req []byte) (<-chan []byte, error) {
 				return
 			case <-t.C:
 				logger.Info().Msg("Notify")
-				respChan <- []byte("printing " + strconv.Itoa(i+1) + "%")
-				i++
-				if i >= 100 {
+				respChan <- []byte("printing " + strconv.Itoa(printProgress) + "%")
+				if printProgress >= 100 || printProgress == 0 {
 					return
 				}
+
 			}
 		}
 	}(ctx, respChan)
@@ -111,18 +143,18 @@ EXIT_LOOPY:
 }
 
 func main() {
+	addr := flag.String("addr", "localhost:17017", "the address to connect to")
+	flag.Parse()
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
 	logger = log.With().Str("module", "access_client").Logger()
-	serverAddr := "localhost:17017"
 	wait := &sync.WaitGroup{}
 	wait.Add(1)
 
-	go virtalDeviceRun(ctx, wait, "cfa09baa-4913-4ad7-a936-2e26f9671b04", "mb6bgso4EChvyzA05thF9+wH", serverAddr)
+	go virtalDeviceRun(ctx, wait, "cfa09baa-4913-4ad7-a936-2e26f9671b04", "mb6bgso4EChvyzA05thF9+wH", *addr)
 
 	wait.Wait()
 	logger.Error().Msg("client exit")
-
 }

@@ -8,9 +8,10 @@ build:
 	go build -gcflags="all=-N -l" -o ./out/examples/ rtio2/examples/...
 
 clean:
+	echo "clean all ..."
 	go clean -i rtio2/...
-	# rm -rf ./out 
 	./scripts/proto-to-go.sh clean
+	rm -rf ./out 
 	
 
 deps:

@@ -159,6 +159,8 @@ resp: print started
 
     RTIO - Real Time Input Output。“实时输入输出”，这里的“实时”指在期望的时间完成通信，否则返回超时错误。通过同步通信方式使IoT（特别是远程控制IoT设备）开发更简单。
 
+<!-- Get可以带上body，url编解码存在不同的协议，所以统一采用body中json进行参数的处理 -->
+
 ## RTIO和MQTT服务交互比较
 
 1. RTIO和MQTT服务交互比较，请求到云端获取version列表

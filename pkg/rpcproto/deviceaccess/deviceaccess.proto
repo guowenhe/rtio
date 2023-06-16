@@ -1,13 +1,27 @@
 syntax = "proto3";
 
-option go_package = "rtio2/pkg/rpcproto/deviceaccess";
+option go_package = "rtio2/pkg/rpcproto/devicestatus";
 package deviceaccess;
 
+import "google/api/annotations.proto";
 
 service AccessService {
-  rpc Post (Req) returns (Resp) {}
-  rpc Get (Req) returns (Resp) {}
-  rpc ObGet (ObGetReq) returns (stream ObGetResp) {}
+  rpc Post (Req) returns (Resp) {
+    option (google.api.http) = {
+      post: "/{device_id}/post_handler"
+      body: "*"
+    };
+  }
+  rpc Get (Req) returns (Resp) {
+    option (google.api.http) = {
+      get: "/{device_id}/get_handler"
+    };
+  }
+  rpc ObGet (ObGetReq) returns (stream ObGetResp) {
+    option (google.api.http) = {
+      get: "/{device_id}/obget_handler"
+    };
+  }
 }
 
 
