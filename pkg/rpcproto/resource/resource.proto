@@ -26,8 +26,9 @@ enum Code {
 
 message Req {
     uint32 id = 1;
-    string device_id = 2;
-    bytes data = 3;
+    uint32 uri = 2;
+    string device_id = 3;
+    bytes data = 4;
 }
 message Resp {
   uint32 id = 1;

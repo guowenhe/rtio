@@ -1,5 +1,6 @@
-*.pb.go
-*.pb.gw.go
 *.log
 /out/
 /go.work
+
+# *.pb.go
+# *.pb.gw.go

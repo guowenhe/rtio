@@ -2,15 +2,21 @@ all: build
 
 build:
 	mkdir -p out
-	go build -gcflags="all=-N -l" -o ./out/ rtio2/internal/...
+	go build -gcflags="all=-N -l" -o ./out/ rtio2/cmd/...
+
+	mkdir -p out/deviceaccess
+	go build -gcflags="all=-N -l" -o ./out/deviceaccess rtio2/internal/deviceaccess/...
+
+	mkdir -p out/useraccess
+	go build -gcflags="all=-N -l" -o ./out/useraccess rtio2/internal/useraccess/...
 
 	mkdir -p out/examples
 	go build -gcflags="all=-N -l" -o ./out/examples/ rtio2/examples/...
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm go build -gcflags="all=-N -l" -tags beaglebone -o ./out/examples/printer_beaglebone rtio2/examples/printer_simulation/printer_beaglebone/
 
 clean:
 	echo "clean all ..."
 	go clean -i rtio2/...
-	./scripts/proto-to-go.sh clean
 	rm -rf ./out 
 	
 
@@ -22,26 +28,27 @@ proto:
 		echo "error: protoc not installed" >&2; \
 		exit 1; \
 	fi
+	@ if ! which protoc-gen-go > /dev/null; then \
+		echo "error: protoc-gen-go not installed" >&2; \
+		exit 1; \
+	fi
+	@ if ! which protoc-gen-go-grpc > /dev/null; then \
+		echo "error: protoc-gen-go-grpc not installed" >&2; \
+		exit 1; \
+	fi
+	@ if ! which protoc-gen-grpc-gateway > /dev/null; then \
+		echo "error: protoc-gen-grpc-gateway not installed" >&2; \
+		exit 1; \
+	fi
 	go generate rtio2/...
+
+proto-clean:
+	./scripts/proto-to-go.sh clean
+
 
 test:
 	go test -cpu 1,4 -timeout 7m rtio2/...
 
-# testsubmodule:
-# 	cd security/advancedtls && go test -cpu 1,4 -timeout 7m google.golang.org/grpc/security/advancedtls/...
-# 	cd security/authorization && go test -cpu 1,4 -timeout 7m google.golang.org/grpc/security/authorization/...
-
-# testrace:
-# 	go test -race -cpu 1,4 -timeout 7m google.golang.org/grpc/...
-
-# testdeps:
-# 	GO111MODULE=on go get -d -v -t google.golang.org/grpc/...
-
-# vet: vetdeps
-# 	./vet.sh
-
-# vetdeps:
-# 	./vet.sh -install
 
 .PHONY: \
 	all \

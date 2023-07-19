@@ -16,14 +16,73 @@ RTIO交互示例可参考下文“RTIO和MQTT服务交互比较”。
 
 ## 特点
 
-- 云端可访问NAT后设备（设备与RTIO服务建立长连接）
-- Rest-Like接口
-- 部署K8S集群中，可自动注册资源服务
-- 用户端接入采用http和webscocket
+- REST-Like模型（参考互联网RESTful模型）
+- 用户端通过HTTP访问设备（无需SDK）
+- 用户端实时观察设备，观察者模式（非轮询）
+- 设备通过GET、POST接口访问rtio代理的资源（k8s集群中可自动发现资源）
+- 用户可访问NAT网络后的设备
 
-## 安装和运行
+## 编译和运行
 
-(完善中...)
+环境需要安装golang（1.20版本以上）和make工具。
+
+```sh
+git clone https://github.com/guowenhe/rtio.git
+cd rtio
+make
+```
+
+成功编译后，out目录下会生成执行文件，主要文件如下，rtio为服务端，printer为设备端。
+
+```sh
+$ tree out/
+out/
+
+├── examples
+│   ├── printer
+│   
+├── rtio
+
+```
+
+运行示例，启动rtio服务（可通过-h参数查看帮助）。
+
+```sh
+$ ./out/rtio
+2023-07-09 10:30:47.132 INF cmd/rtio/rtio.go:65 > rtio starting ...
+
+```
+
+启动设备，模拟打印机。
+
+```sh
+$ ./out/examples/printer
+2023-07-09 10:33:23.136 INF internal/deviceaccess/access_client/devicesession/devicesession.go:556 > serving device_ip=127.0.0.1:40878 deviceid=cfa09baa-4913-4ad7-a936-2e26f9671b04
+2023-07-09 10:33:23.137 INF internal/deviceaccess/access_client/devicesession/devicesession.go:505 > auth pass
+```
+
+模拟用户端，下达开始打印指令。
+
+```sh
+$ curl -X POST "http://127.0.0.1:17317/cfa09baa-4913-4ad7-a936-2e26f9671b04/post_handler" -d '{"uri":"/printer/action","id":12667,"data":"c3Rhcn
+Q="}'
+{"id":12667,"code":"CODE_OK","data":"cHJpbnQgc3RhcnRlZA=="} # 
+```
+
+模拟用户端，持续获取打印进度。
+
+```sh
+$ curl -X GET "http://127.0.0.1:17317/cfa09baa-4913-4ad7-a936-2e26f9671b04/obget_handler?uri=%2Fprinter%2Fstatus&id=12334&data=MTIzNDU%3D"
+{"result":{"id":12334,"fid":0,"code":"CODE_CONTINUE","data":"cHJpbnRpbmcgNDUl"}}
+{"result":{"id":12334,"fid":1,"code":"CODE_CONTINUE","data":"cHJpbnRpbmcgNDgl"}}
+{"result":{"id":12334,"fid":2,"code":"CODE_CONTINUE","data":"cHJpbnRpbmcgNTIl"}}
+...
+{"result":{"id":12334,"fid":18,"code":"CODE_CONTINUE","data":"cHJpbnRpbmcgOTEl"}} # data部分base64解码后：printing 91%
+{"result":{"id":12334,"fid":19,"code":"CODE_CONTINUE","data":"cHJpbnRpbmcgOTQl"}} 
+{"result":{"id":12334,"fid":20,"code":"CODE_CONTINUE","data":"cHJpbnRpbmcgOTgl"}}
+{"result":{"id":12334,"fid":21,"code":"CODE_CONTINUE","data":"cHJpbnRpbmcgMTAwJQ=="}} # data部分base64解码后：printing 100%
+{"result":{"id":12334,"fid":22,"code":"CODE_TERMINATE","data":""}}
+```
 
 ## 集成示例
 
@@ -31,12 +90,12 @@ RTIO交互示例可参考下文“RTIO和MQTT服务交互比较”。
 
 ```golang
 func handlerAction(req []byte) ([]byte, error) {
-  logger.Info().Str("req", string(req)).Msg("") 
+  log.Info().Str("req", string(req)).Msg("") 
   return []byte("print started"), nil
 }
 
 func handerStatus(ctx context.Context, req []byte) (<-chan []byte, error) {
-  logger.Info().Str("req", string(req)).Msg("")
+  log.Info().Str("req", string(req)).Msg("")
   respChan := make(chan []byte, 1)
   go func(context.Context, <-chan []byte) {
   for {
@@ -65,69 +124,8 @@ func handerStatus(ctx context.Context, req []byte) (<-chan []byte, error) {
 
 注：GET/POST每次交互都带有URI标识，为压缩URI数据量，交互过程采用4字节的哈希摘要（CRC32）进行通信。
 
-用户接入端代码，post命令：
+用户端Javascript参考：[user.html](examples/printer_simulation/user_html/user.html)
 
-```golang
-
-  req := &da.Req{
-    Uri:      "/printer/action",
-    Id:       id,
-    DeviceId: "cfa09baa-4913-4ad7-a936-2e26f9671b04",
-    Data:     []byte("{\"commnd\": \"start\"}"),
-  }
-
-  resp, err := c.Post(ctx, req)
-  ...
-  fmt.Println("resp:", string(resp.Data))   
-```
-
-Post相关日志
-
-```text
-设备端:
-examples/device/device.go:18 > module=access_client req="{\"commnd\": \"start\"}
-用户接入端:
-resp: print started
-```
-
-用户接入端代码，观察status：
-
-```golang
-  req := &da.ObGetReq{
-    Uri:      "/printer/status", 
-    Id:       id,
-    DeviceId: "cfa09baa-4913-4ad7-a936-2e26f9671b04",
-    Data:     []byte("{\"policy\": \"close-when-100\"}"),
-  }
-
-  stream, err := c.ObGet(ctx, req)
-  ...
-
-  for {
-    res, err := stream.Recv()
-    ...
-    fmt.Println(res.Id, res.Code, res.Fid, string(res.Data))
-  }
-```
-
-用户接入端日志：
-
-```log
-2176192118 CODE_CONTINUE 0 printing 1%
-2176192118 CODE_CONTINUE 1 printing 2%
-2176192118 CODE_CONTINUE 2 printing 3%
-2176192118 CODE_CONTINUE 3 printing 4%
-2176192118 CODE_CONTINUE 4 printing 5%
-...
-2176192118 CODE_CONTINUE 96 printing 97%
-2176192118 CODE_CONTINUE 97 printing 98%
-2176192118 CODE_CONTINUE 98 printing 99%
-2176192118 CODE_CONTINUE 99 printing 100%
-2176192118 CODE_TERMINATE 100 
-
-```
-
-<!-- ### 运行 -->
 
 <!-- ### docker安装 -->
 
@@ -139,7 +137,7 @@ resp: print started
 
 ## 项目进度和计划
 
-目前仅完成设备端到服务端接入，未完成用户端接入。
+目前仅完成设备端到服务端接入和Demo示例，rtio核心部分。（未完成后端资源自动注册等功能、设备auth接口、用户端认证功能）
 
 ## FQA
 
