@@ -1,26 +1,29 @@
 # RTIO（Real Time Input Output Service for IoT）
 
-RTIO结合Rest（Rest-Like）模型实现物联网设备与云端通信，与MQTT服务相同的是云端可以访问NAT后面的设备，但与其“发布订阅模型”完全不同。
+RTIO提供设备上云的端到端解决方案，主要包括设备接入、设备代理、后端资源代理等功能：
+
+- 用户端使用HTTP GET、POST方法通过RTIO控制和实时观察设备（通常用户端下发指令、观察设备状态）
+- 设备通过GET、POST接口访问RTIO代理的资源（通常设备端获取服务端资源、上报事件）
+- 用户可访问NAT网络后的设备
+
+## 特点
+
+- REST-Like模型，其参考RESTFul模型
+- 用户端通过HTTP访问设备，无需集成SDK
+- 用户端通过HTTP即可实时观察设备（非轮询）
+- 解耦资源实现和资源调用者（以URI标识不同资源或能力，无topic耦合）
 
 ## 为什么创建RTIO
 
-RTIO提供端到端的解决方案，简化设备接入云端开发。设备也是服务资源的提供者，RTIO采取Rest-Like模型，使设备端开发具有和WEB服务开发相似的体验和高效。主要有以下优势：
+RTIO简化设备接入云端开发。设备也是服务资源的提供者，RTIO采取REST-Like模型，使设备端开发具有和WEB服务开发相似的体验和高效。主要有以下优势：
 
 - 以URI标识不同资源或能力，比如设备提供V2/V3接口，方便设备资源或能力迭代
 - 通过GET、POST和ObGet（Observe-GET）等方法交互，流程更简单（相比MQTT减少一半以上交互，可参考FQA部分）
 - 解耦资源实现和资源调用者，可使用工具独立测试（类似使用curl/postman工具验证WEB服务接口）
 
-Rest-Like模型，这里指类似Rest模型，但不以HTTP协议作为底层协议，模型提供了GET和POST方法和ObGET（Observe-GET，观察者模式）等方法。
+REST-Like模型，这里指类似REST模型，但不以HTTP协议作为底层协议，模型提供了GET和POST方法和ObGET（Observe-GET，观察者模式）等方法。
 
 RTIO交互示例可参考下文“RTIO和MQTT服务交互比较”。
-
-## 特点
-
-- REST-Like模型（参考互联网RESTful模型）
-- 用户端通过HTTP访问设备（无需SDK）
-- 用户端实时观察设备，观察者模式（非轮询）
-- 设备通过GET、POST接口访问rtio代理的资源（k8s集群中可自动发现资源）
-- 用户可访问NAT网络后的设备
 
 ## 编译和运行
 
