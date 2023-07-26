@@ -23,14 +23,17 @@ import (
 	"errors"
 	"net"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/rs/zerolog/log"
 )
 
 type ServerTCP struct {
-	listener net.Listener
-	sessions *SessionMap
-	wait     *sync.WaitGroup
+	listener   net.Listener
+	sessions   *SessionMap
+	wait       *sync.WaitGroup
+	sessionNum int32
 }
 
 func NewServerTCP(addr string, sessionMap *SessionMap) (*ServerTCP, error) {
@@ -42,9 +45,10 @@ func NewServerTCP(addr string, sessionMap *SessionMap) (*ServerTCP, error) {
 	}
 
 	return &ServerTCP{
-		listener: listener,
-		sessions: sessionMap,
-		wait:     &sync.WaitGroup{},
+		listener:   listener,
+		sessions:   sessionMap,
+		wait:       &sync.WaitGroup{},
+		sessionNum: 0,
 	}, nil
 }
 
@@ -55,11 +59,15 @@ func (s *ServerTCP) AddSession(deviceID string, session *Session) {
 		log.Debug().Msg("invalid session cancel")
 		<-invalid.Done()
 		log.Debug().Msg("invalid session done")
+	} else {
+		atomic.AddInt32(&s.sessionNum, 1)
 	}
 	s.sessions.Set(deviceID, session)
+
 }
 func (s *ServerTCP) DelSession(deviceID string) {
 	s.sessions.Del(deviceID)
+	atomic.AddInt32(&s.sessionNum, -1)
 }
 
 func (s *ServerTCP) Shutdown() {
@@ -74,8 +82,17 @@ func (s *ServerTCP) Serve(c context.Context) {
 	log.Info().Str("addr", s.listener.Addr().String()).Msg("server started")
 
 	go func() {
-		<-ctx.Done()
-		log.Debug().Msg("context done")
+		t := time.NewTicker(time.Second * 10)
+	EXIT_LOOPY:
+		for {
+			select {
+			case <-ctx.Done():
+				log.Debug().Msg("context done")
+				break EXIT_LOOPY
+			case <-t.C:
+				log.Debug().Int32("sessionnum", s.sessionNum).Msg("")
+			}
+		}
 		s.Shutdown()
 	}()
 

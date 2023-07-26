@@ -585,7 +585,7 @@ func (s *DeviceSession) Serve(ctx context.Context, errChan chan<- error) {
 		case <-deviceCtx.Done():
 			log.Debug().Msg("device done when deviceCtx done")
 			if err := s.conn.Close(); err != nil {
-				log.Debug().Err(err).Msg("device close conn error")
+				log.Warn().Err(err).Msg("device close conn error")
 			}
 			return
 		case <-heartbeat.C:
