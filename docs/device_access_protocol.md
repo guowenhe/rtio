@@ -50,7 +50,7 @@
 - BodyLength: 16-bit 消息体（Payload）长度（字节数）
 - Body: 消息体（Payload）
 
-以上除Body字段外为消息头（Message Header，前5字节），Body长度由Header中BodyLength字段表示。
+前5字节（除Body字段外）为消息头（Message Header），Body长度由Header中BodyLength字段表示。
   
 ## 1.3. 设备鉴权
 
@@ -71,7 +71,7 @@
   - Specifics: 8-bit 设备属性
     - CL (Capacity Level): 2-bit Body的最大承载能力；值0表示512字节, 1表示1024字节，2表示2048字节，3表示4096字节
     - Reserves: 保留字段
-- AuthData：设备ID和密钥的拼装，由“:”连接(deviceID:deviceSecret)
+- AuthData：设备ID和密钥的拼装，由“:”连接(deviceID:deviceSecret)，总长度不超过512字节
 
 ### 1.3.2. 应答
 
@@ -79,6 +79,8 @@
 - Header中MessageID必须与请求匹配
 - Header中Code为响应码
 - Body为空
+
+注意：连接建立起来后，如果超过15秒未完成Auth，服务端直接断开连接，不返回应答数据。
 
 ## 1.4. 设备心跳
 
@@ -96,13 +98,15 @@
 ```
 
 - Body定义为以下部分
-  - TimeOut: 16-bit 心跳发送间隔（可选），范围为30-1800秒，服务端检测超过1.5个TimeOut时⻓没收到心跳则认为客户端断开；参数设定错误，链接强制断开
+  - TimeOut: 16-bit 心跳发送间隔（可选），范围为30-43200秒，服务端检测超过1.5个TimeOut时⻓没收到心跳则认为客户端断开；参数设定错误返回“参数无效”。
 
 ### 1.4.2. 应答
 
 - Header中Type为DevicePingResp
 - Header中MessageID必须与请求匹配
 - Header中Code为响应码
+
+注意: 连接建立起来且鉴权成功后，未按间隔发送心跳且没有数据通信，服务端直接断开连接，不返回应答数据。
 
 ## 1.5. 发送消息
 
@@ -187,7 +191,6 @@ REST-Like Method：
 
 - Method - 4-bit 请求方法。
 - Status（StatusCode） - 4 bit， 参考StatusCode描述章节。
-- ObservationID: 16-bit 观察ID。
 - Data 携带的数据。
 
 ### 1.6.2 ObservedGet

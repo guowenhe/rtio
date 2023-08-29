@@ -20,10 +20,11 @@ package main
 
 import (
 	"context"
-	"net"
+	"flag"
 	"os/signal"
 	ds "rtio2/internal/deviceaccess/access_client/devicesession"
 	"rtio2/pkg/logsettings"
+
 	"strconv"
 	"sync"
 	"syscall"
@@ -31,35 +32,6 @@ import (
 
 	"github.com/rs/zerolog/log"
 )
-
-// func virtalDeviceRun1(ctx context.Context, wait *sync.WaitGroup, deviceID, deviceSecret, serverAddr string) {
-// 	defer wait.Done()
-
-// 	conn, err := net.DialTimeout("tcp", serverAddr, time.Second*60)
-// 	if err != nil {
-// 		log.Error().Err(err).Msg("connect server error")
-// 		return
-// 	}
-// 	defer conn.Close()
-
-// 	session := ds.NewDeviceSession(conn, deviceID, deviceSecret)
-// 	errChan := make(chan error, 1)
-// 	go session.Serve(ctx, errChan)
-
-// 	for {
-// 		select {
-// 		case <-ctx.Done():
-// 			log.Debug().Msg("virtalDeviceRun context done")
-// 			return
-// 		case err := <-errChan:
-// 			log.Error().Err(err).Msg("session error")
-// 		case f := <-session.SSFrames():
-// 			log.Info().Uint16("frameid", f.ID).Msg("virtalDeviceRun")
-// 			fmt.Println(string(f.GetRequest()))
-// 			f.SetResponse([]byte("this a virtal device resp"))
-// 		}
-// 	}
-// }
 
 func Handler(req []byte) ([]byte, error) {
 	log.Info().Str("req", string(req)).Msg("")
@@ -101,29 +73,29 @@ func Handler_0x7c88eed8(ctx context.Context, req []byte) (<-chan []byte, error) 
 func virtalDeviceRun(ctx context.Context, wait *sync.WaitGroup, deviceID, deviceSecret, serverAddr string) {
 	defer wait.Done()
 
-	conn, err := net.DialTimeout("tcp", serverAddr, time.Second*60)
+	log.Info().Str("deviceid", deviceID).Msg("virtalDeviceRun run")
+
+	defer func() {
+		log.Info().Str("deviceid", deviceID).Msg("virtalDeviceRun exit")
+	}()
+
+	session, err := ds.Connect(ctx, deviceID, deviceSecret, serverAddr)
 	if err != nil {
-		log.Error().Err(err).Msg("connect server error")
+		log.Error().Str("deviceid", deviceID).Err(err).Msg("connection error")
 		return
 	}
-	defer conn.Close()
-
-	session := ds.NewDeviceSession(conn, deviceID, deviceSecret)
-	errChan := make(chan error, 1)
-	go session.Serve(ctx, errChan)
-
 	session.RegisterObGetHandler(0x7c88eed8, Handler_0x7c88eed8)
 	session.RegisterGetHandler(0x7c88eed8, Handler)
 	session.RegisterPostHandler(0x7c88eed8, Handler)
 
-	t := time.NewTicker(time.Second * 5)
+	t := time.NewTicker(time.Second * 30)
 	defer t.Stop()
-EXIT_LOOPY:
+
 	for {
 		select {
 		case <-ctx.Done():
 			log.Info().Msg("ctx done")
-			break EXIT_LOOPY
+			return
 		case <-t.C:
 			log.Debug().Str("virtalDeviceRun now", time.Now().String())
 			resp, err := session.Post(0x7c88eed8, []byte("test for device post"), time.Second*20)
@@ -135,35 +107,21 @@ EXIT_LOOPY:
 		}
 	}
 
-	log.Info().Msg("virtalDeviceRun exit")
-
 }
 
 func main() {
 
 	logsettings.Set()
-	// flag.Usage = func() {
-	// 	fmt.Println("./client server:port")
-	// }
-	// flag.Parse()
-	// args := flag.Args()
-	// var serverAddr string
-	// if len(args) > 1 {
-	// 	serverAddr = args[0]
-	// } else {
-	// 	fmt.Println("./client server:port")
-	// 	log.Error().Msg("server address error")
-	// 	return
-	// }
+	serverAddr := flag.String("server", "localhost:17017", "server address")
+	flag.Parse()
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	serverAddr := "localhost:17017"
 	wait := &sync.WaitGroup{}
 	wait.Add(1)
-
-	go virtalDeviceRun(ctx, wait, "cfa09baa-4913-4ad7-a936-2e26f9671b04", "mb6bgso4EChvyzA05thF9+wH", serverAddr)
+	//user test: curl -X GET "http://127.0.0.1:17317/cfa09baa-4913-4ad7-a936-2e26f9671b05/get_handler?uri=%2Ftest"
+	go virtalDeviceRun(ctx, wait, "cfa09baa-4913-4ad7-a936-2e26f9671b05", "mb6bgso4EChvyzA05thF9+wH", *serverAddr)
 
 	wait.Wait()
 	log.Error().Msg("client exit")

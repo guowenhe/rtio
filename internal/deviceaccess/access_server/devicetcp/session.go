@@ -38,21 +38,27 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+const (
+	HEARTBEAT_SECONDS_DEFAULT = 300
+)
+
 var (
 	OutgoingChanSize = 10
 
-	ErrSessionNotFound    = errors.New("ErrSessionNotFound")
-	ErrDataType           = errors.New("ErrDataType")
-	ErrOverCapacity       = errors.New("ErrOverCapacity")
-	ErrSendTimeout        = errors.New("ErrSendTimeout")
-	ErrSendRespChannClose = errors.New("ErrSendRespChannClose")
-	ErrSessionAuthData    = errors.New("ErrSessionAuthData")
-	ErrHeaderIDNotExist   = errors.New("ErrHeaderIDNotExist")
-	ErrObservaNotMatch    = errors.New("ErrObservaNotMatch")
-	ErrObservaNotFound    = errors.New("ErrObservaNotFound")
-	ErrMethodNotAllowed   = errors.New("ErrMethodNotAllowed")
-	ErrResourceNotFound   = errors.New("ErrResourceNotFound")
-	ErrMethodNotMatch     = errors.New("ErrMethodNotMatch")
+	ErrSessionNotFound         = errors.New("ErrSessionNotFound")
+	ErrDataType                = errors.New("ErrDataType")
+	ErrOverCapacity            = errors.New("ErrOverCapacity")
+	ErrSendTimeout             = errors.New("ErrSendTimeout")
+	ErrSendRespChannClose      = errors.New("ErrSendRespChannClose")
+	ErrSessionAuthData         = errors.New("ErrSessionAuthData")
+	ErrSessionAuthNotCompleted = errors.New("ErrSessionAuthNotCompleted")
+	ErrSessionHeartbeatTimeout = errors.New("ErrSessionHeartbeatTimeout")
+	ErrHeaderIDNotExist        = errors.New("ErrHeaderIDNotExist")
+	ErrObservaNotMatch         = errors.New("ErrObservaNotMatch")
+	ErrObservaNotFound         = errors.New("ErrObservaNotFound")
+	ErrMethodNotAllowed        = errors.New("ErrMethodNotAllowed")
+	ErrResourceNotFound        = errors.New("ErrResourceNotFound")
+	ErrMethodNotMatch          = errors.New("ErrMethodNotMatch")
 )
 
 type Message struct {
@@ -70,6 +76,7 @@ type Session struct {
 	rollingObservaID atomic.Uint32 // rolling number for observation id
 	observaCount     atomic.Int32
 	BodyCapSize      uint16
+	heartbeatSeconds uint16
 	remoteAddr       net.Addr
 	authPass         bool
 	cancel           context.CancelFunc
@@ -78,10 +85,11 @@ type Session struct {
 
 func newSession(conn net.Conn) *Session {
 	s := &Session{
-		conn:         conn,
-		outgoingChan: make(chan []byte, OutgoingChanSize),
-		authPass:     false,
-		done:         make(chan struct{}, 1),
+		conn:             conn,
+		outgoingChan:     make(chan []byte, OutgoingChanSize),
+		authPass:         false,
+		done:             make(chan struct{}, 1),
+		heartbeatSeconds: HEARTBEAT_SECONDS_DEFAULT,
 	}
 	s.sendIDStore = timekv.NewTimeKV(time.Second * 120)
 	s.rollingHeaderID.Store(0)
@@ -122,13 +130,17 @@ func transToDeviceCode(code resource.Code) dp.StatusCode {
 	return dp.StatusCode_Unknown
 }
 
+func calcuCheckSenconds(heartbeat uint16) time.Duration {
+
+	return time.Duration(heartbeat + (heartbeat >> 1)) // heartbeat * 1.5
+}
+
 func (s *Session) genHeaderID() uint16 {
 	return uint16(s.rollingHeaderID.Add(1))
 }
 func (s *Session) genObservaID() uint16 {
 	return uint16(s.rollingObservaID.Add(1))
 }
-
 func (s *Session) CreateObserva() (*Observa, error) {
 	if s.observaCount.Load() >= dp.OBGET_OBSERVATIONS_MAX {
 		return nil, dp.StatusCode_TooManyObservations
@@ -325,22 +337,22 @@ func (s *Session) Cancel() {
 func (s *Session) Done() <-chan struct{} {
 	return s.done
 }
-func (s *Session) authProcess(header *dp.Header) (bool, error) {
+func (s *Session) deviceAuthProcess(header *dp.Header) (bool, error) {
 	reqBodyBuf := make([]byte, header.BodyLen)
 	readLen, err := io.ReadFull(s.conn, reqBodyBuf)
 	if err != nil {
-		log.Error().Int("readLen", readLen).Err(err).Msg("authProcess, ReadFull")
+		log.Error().Int("readLen", readLen).Err(err).Msg("deviceAuthProcess, ReadFull")
 		return s.authPass, err
 	}
 	req, err := dp.DecodeAuthReqBody(header, reqBodyBuf)
 
 	if err != nil {
-		log.Error().Err(err).Msg("authProcess, DecodeBodyAuthReq")
+		log.Error().Err(err).Msg("deviceAuthProcess, DecodeBodyAuthReq")
 		return s.authPass, err
 	}
 
 	if len(req.DeviceID) == 0 || len(req.DeviceSecret) == 0 {
-		log.Error().Err(ErrSessionAuthData).Msg("authProcess, DecodeBodyAuthReq")
+		log.Error().Err(ErrSessionAuthData).Msg("deviceAuthProcess, DecodeBodyAuthReq")
 		return s.authPass, ErrSessionAuthData
 	}
 
@@ -352,7 +364,7 @@ func (s *Session) authProcess(header *dp.Header) (bool, error) {
 	s.deviceID = req.DeviceID
 	capSize, err := dp.GetCapSize(req.CapLevel)
 	if err != nil {
-		log.Error().Err(err).Msg("authProcess, GetCapSize")
+		log.Error().Err(err).Msg("deviceAuthProcess, GetCapSize")
 		return s.authPass, err
 	}
 	s.BodyCapSize = capSize
@@ -373,7 +385,51 @@ func (s *Session) authProcess(header *dp.Header) (bool, error) {
 	s.outgoingChan <- respBuf
 	return s.authPass, nil
 }
+func (s *Session) devicePingProcess(header *dp.Header) error {
 
+	bodyBuf := make([]byte, header.BodyLen)
+	readLen, err := io.ReadFull(s.conn, bodyBuf)
+	if err != nil {
+		log.Error().Int("readLen", readLen).Err(err).Msg("devicePingProcess, ReadFull")
+		return err
+	}
+
+	respCode := dp.Code_Success
+	req, err := dp.DecodePingReqBody(header, bodyBuf)
+	if err != nil {
+		log.Error().Err(err).Msg("devicePingProcess, DecodePingReqBody")
+		if err == dp.ErrLengthError {
+			respCode = dp.Code_LengthErr
+		} else {
+			return err
+		}
+	}
+	// update timeout value by device
+	if req.Timeout != 0 {
+		if req.Timeout < 30 || req.Timeout > 43200 { // 43200 secodes = 12 hours
+			respCode = dp.Code_ParaInvalid
+		} else {
+			s.heartbeatSeconds = req.Timeout
+		}
+	}
+
+	// send ping resp
+	resp := &dp.PingResp{
+		Header: &dp.Header{
+			Version: dp.Version,
+			Type:    dp.MsgType_DevicePingResp,
+			ID:      req.Header.ID,
+			BodyLen: 0,
+			Code:    respCode,
+		},
+	}
+	respBuf, err := dp.EncodePingResp(resp)
+	if err != nil {
+		return err
+	}
+	s.outgoingChan <- respBuf
+	return nil
+}
 func (s *Session) serverSendRespone(header *dp.Header) error {
 	value, ok := s.sendIDStore.Get(timekv.Key(header.ID))
 
@@ -524,7 +580,8 @@ func (s *Session) deviceSendRequest(header *dp.Header) error {
 	}
 	return nil
 }
-func (s *Session) tcpIncomming(serveCtx context.Context, addSession func(string, *Session), errChan chan<- error) {
+func (s *Session) tcpIncomming(serveCtx context.Context, addSession func(string, *Session),
+	authTimer *time.Timer, heartbeatTimer *time.Ticker, errChan chan<- error) {
 	defer func() {
 		log.Debug().Msg("tcpIncomming exit")
 	}()
@@ -538,7 +595,7 @@ func (s *Session) tcpIncomming(serveCtx context.Context, addSession func(string,
 
 			headBuf := make([]byte, dp.HeaderLen)
 			readLen, err := io.ReadFull(s.conn, headBuf)
-			log.Debug().Int("readlen", readLen).Msg("tcpIncomming, read header")
+			log.Debug().Int("readlen", readLen).Hex("buf", headBuf).Msg("tcpIncomming, read header")
 			if err != nil {
 				errChan <- err
 				return
@@ -551,25 +608,35 @@ func (s *Session) tcpIncomming(serveCtx context.Context, addSession func(string,
 
 			switch header.Type {
 			case dp.MsgType_DeviceAuthReq:
-				if ok, err := s.authProcess(header); err != nil {
+				if ok, err := s.deviceAuthProcess(header); err != nil {
 					errChan <- err
 					return
 				} else {
 					if ok { // auth passed
 						addSession(s.deviceID, s)
+						authTimer.Stop()
+						log.Debug().Msg("tcpIncomming, auth passed, authTimer stoped")
 					}
 				}
 			case dp.MsgType_DevicePingReq:
+				if err := s.devicePingProcess(header); err != nil {
+					errChan <- err
+					return
+				}
+				log.Debug().Uint16("heartbeat", s.heartbeatSeconds).Msg("tcpIncomming, ping req")
+				heartbeatTimer.Reset(time.Second * calcuCheckSenconds(s.heartbeatSeconds))
 			case dp.MsgType_DeviceSendReq:
 				if err := s.deviceSendRequest(header); err != nil {
 					errChan <- err
 					return
 				}
+				heartbeatTimer.Reset(time.Second * calcuCheckSenconds(s.heartbeatSeconds))
 			case dp.MsgType_ServerSendResp:
 				if err := s.serverSendRespone(header); err != nil {
 					errChan <- err
 					return
 				}
+				heartbeatTimer.Reset(time.Second * calcuCheckSenconds(s.heartbeatSeconds))
 			default:
 				log.Error().Err(ErrDataType).Uint8("type", uint8(header.Type)).Msg("tcpIncomming")
 				errChan <- ErrDataType
@@ -627,15 +694,27 @@ func (s *Session) serve(ctx context.Context, wait *sync.WaitGroup,
 		s.done <- struct{}{}
 	}()
 
+	authTimer := time.NewTimer(time.Second * 15)
+	defer authTimer.Stop()
+	heartbeatTimer := time.NewTicker(time.Second * calcuCheckSenconds(s.heartbeatSeconds))
+	defer heartbeatTimer.Stop()
 	errChan := make(chan error, 2)
 	go s.tcpOutgoing(serveCtx, errChan)
-	go s.tcpIncomming(serveCtx, addSession, errChan)
+	go s.tcpIncomming(serveCtx, addSession, authTimer, heartbeatTimer, errChan)
 
 	storeTicker := time.NewTicker(time.Second * 5)
 	defer storeTicker.Stop()
 
 	for {
 		select {
+		case <-authTimer.C:
+			log.Debug().Err(ErrSessionAuthNotCompleted).Msg("authTimer timeout")
+			errChan <- ErrSessionAuthNotCompleted
+			return
+		case <-heartbeatTimer.C:
+			log.Debug().Err(ErrSessionHeartbeatTimeout).Msg("tcpIncomming heartbeatTimer timeout")
+			errChan <- ErrSessionHeartbeatTimeout
+			return
 		case err := <-errChan:
 			s.cancel()
 			log.Warn().Err(err).Msg("serve done when error")

@@ -25,7 +25,6 @@ import (
 	"bytes"
 	"context"
 	"flag"
-	"net"
 	"os/signal"
 	ds "rtio2/internal/deviceaccess/access_client/devicesession"
 	"rtio2/pkg/logsettings"
@@ -106,33 +105,34 @@ func handerStatus(ctx context.Context, req []byte) (<-chan []byte, error) {
 func virtalDeviceRun(ctx context.Context, wait *sync.WaitGroup, deviceID, deviceSecret, serverAddr string) {
 	defer wait.Done()
 
-	conn, err := net.DialTimeout("tcp", serverAddr, time.Second*60)
+	log.Info().Str("deviceid", deviceID).Msg("virtalDeviceRun run")
+
+	defer func() {
+		log.Info().Str("deviceid", deviceID).Msg("virtalDeviceRun exit")
+	}()
+
+	session, err := ds.Connect(ctx, deviceID, deviceSecret, serverAddr)
 	if err != nil {
-		log.Error().Err(err).Msg("connect server error")
+		log.Error().Str("deviceid", deviceID).Err(err).Msg("connection error")
 		return
 	}
-	defer conn.Close()
-
-	deviceSession := ds.NewDeviceSession(conn, deviceID, deviceSecret)
-	errChan := make(chan error, 1)
-	go deviceSession.Serve(ctx, errChan)
 
 	// URI: /printer/action 0x44d87c69
-	deviceSession.RegisterPostHandler(0x44d87c69, handlerAction)
+	session.RegisterPostHandler(0x44d87c69, handlerAction)
 	// URI: /printer/status 0x781495e7
-	deviceSession.RegisterObGetHandler(0x781495e7, handerStatus)
+	session.RegisterObGetHandler(0x781495e7, handerStatus)
 
 	t := time.NewTicker(time.Second * 60)
 	defer t.Stop()
-EXIT_LOOPY:
+
 	for {
 		select {
 		case <-ctx.Done():
 			log.Info().Msg("ctx done")
-			break EXIT_LOOPY
+			return
 		case <-t.C:
 			log.Debug().Str("virtalDeviceRun now", time.Now().String())
-			resp, err := deviceSession.Post(0x7c88eed8, []byte("this a event"), time.Second*20)
+			resp, err := session.Post(0x7c88eed8, []byte("this a event"), time.Second*20)
 			if err != nil {
 				log.Error().Err(err).Msg("")
 			} else {
@@ -140,15 +140,12 @@ EXIT_LOOPY:
 			}
 		}
 	}
-
-	log.Info().Msg("virtalDeviceRun exit")
-
 }
 
 func main() {
 
 	logsettings.Set()
-	addr := flag.String("addr", "localhost:17017", "the address to connect to")
+	serverAddr := flag.String("server", "localhost:17017", "server address")
 	flag.Parse()
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -157,7 +154,7 @@ func main() {
 	wait := &sync.WaitGroup{}
 	wait.Add(1)
 
-	go virtalDeviceRun(ctx, wait, "cfa09baa-4913-4ad7-a936-2e26f9671b04", "mb6bgso4EChvyzA05thF9+wH", *addr)
+	go virtalDeviceRun(ctx, wait, "cfa09baa-4913-4ad7-a936-2e26f9671b04", "mb6bgso4EChvyzA05thF9+wH", *serverAddr)
 
 	wait.Wait()
 	log.Error().Msg("client exit")

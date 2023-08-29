@@ -48,5 +48,5 @@ func Set() {
 	}
 
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnixMs
-	zerolog.DisableSampling(true)
+	// zerolog.DisableSampling(true)
 }

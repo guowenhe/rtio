@@ -1,20 +1,20 @@
 /*
 *
 * Copyright 2023 RTIO authors.
-* 
+*
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
 * You may obtain a copy of the License at
-* 
+*
 *      http://www.apache.org/licenses/LICENSE-2.0
-* 
+*
 * Unless required by applicable law or agreed to in writing, software
 * distributed under the License is distributed on an "AS IS" BASIS,
 * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 * See the License for the specific language governing permissions and
 * limitations under the License.
-* 
-*/
+*
+ */
 
 package deviceproto
 
@@ -59,13 +59,14 @@ func (t MsgType) String() string {
 		return "MsgType_ServerSendResp"
 	default:
 	}
-	return "Code_UndefineError"
+	return "MsgType_UndefineError"
 }
 
 var (
 	ErrUnkown       = errors.New("ErrUnkown")
 	ErrExceedLength = errors.New("ErrExceedLength")
 	ErrNotEnought   = errors.New("ErrNotEnought")
+	ErrLengthError  = errors.New("ErrLengthError")
 	ErrEncode       = errors.New("ErrEncode")
 	ErrDecode       = errors.New("ErrDecode")
 	ErrNetRead      = errors.New("ErrNetRead")
@@ -109,7 +110,8 @@ type AuthResp struct {
 	Header *Header
 }
 type PingReq struct {
-	Header *Header
+	Header  *Header
+	Timeout uint16
 }
 type PingResp struct {
 	Header *Header
@@ -255,33 +257,45 @@ func EncodeAuthResp(resp *AuthResp) ([]byte, error) {
 	return buf, nil
 }
 
-func DecodePingReq(buf []byte) (*PingReq, error) {
-	req := new(PingReq)
+func DecodePingReqBody(header *Header, buf []byte) (*PingReq, error) {
+	if nil == header {
+		return nil, ErrHeaderNil
+	}
+	req := &PingReq{
+		Header:  header,
+		Timeout: 0,
+	}
+	if header.BodyLen == 0 {
+		return req, nil
+	} else if header.BodyLen == 2 {
+		req.Timeout = (uint16(buf[0]) << 8) + uint16(buf[1])
+	} else {
+		return nil, ErrLengthError
+	}
 	return req, nil
 }
-func EncodePingReq(req *PingReq, buf []byte) (uint16, error) {
-	bodyLen := 2
-	if len(buf) < bodyLen {
-		return 0, ErrNotEnought
+func EncodePingReq(req *PingReq) ([]byte, error) {
+	bodyLen := 0
+	if req.Timeout != 0 {
+		bodyLen = 2
 	}
-	// buf[0] = (req.capLevel << 6) & 0xc0
-	// copy(buf[1:], bodyLen)
-	return uint16(bodyLen), nil
-}
-func DecodePingResp(buf []byte) (*PingResp, error) {
-
-	req := new(PingResp)
-
-	return req, nil
-}
-func EncodePingResp(req *PingResp, buf []byte) (uint16, error) {
-	bodyLen := 2
-	if len(buf) < bodyLen {
-		return 0, ErrNotEnought
+	buf := make([]byte, int(HeaderLen)+bodyLen)
+	if bodyLen == 2 {
+		buf[HeaderLen] = byte(req.Timeout >> 8)
+		buf[HeaderLen+1] = byte(req.Timeout & 0xFF)
 	}
-	// buf[0] = (req.capLevel << 6) & 0xc0
-	// copy(buf[1:], bodyLen)
-	return uint16(bodyLen), nil
+	req.Header.BodyLen = uint16(bodyLen)
+	if err := EncodeHeader(req.Header, buf); err != nil {
+		return nil, err
+	}
+	return buf, nil
+}
+func EncodePingResp(resp *PingResp) ([]byte, error) {
+	buf := make([]byte, int(HeaderLen))
+	if err := EncodeHeader(resp.Header, buf); err != nil {
+		return nil, err
+	}
+	return buf, nil
 }
 
 func DecodeSendReq(buf []byte) (*SendReq, error) {

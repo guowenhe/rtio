@@ -58,10 +58,9 @@ func (s *ServerTCP) AddSession(deviceID string, session *Session) {
 		invalid.Cancel()
 		log.Debug().Msg("invalid session cancel")
 		<-invalid.Done()
-		log.Debug().Msg("invalid session done")
-	} else {
-		atomic.AddInt32(&s.sessionNum, 1)
+		log.Debug().Msg("invalid session done v2.01")
 	}
+	atomic.AddInt32(&s.sessionNum, 1)
 	s.sessions.Set(deviceID, session)
 
 }
@@ -90,7 +89,7 @@ func (s *ServerTCP) Serve(c context.Context) {
 				log.Debug().Msg("context done")
 				break EXIT_LOOPY
 			case <-t.C:
-				log.Debug().Int32("sessionnum", s.sessionNum).Msg("")
+				log.Error().Int32("sessionnum", s.sessionNum).Msg("")
 			}
 		}
 		s.Shutdown()

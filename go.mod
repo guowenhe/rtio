@@ -3,6 +3,7 @@ module rtio2
 go 1.18
 
 require (
+	github.com/gofrs/uuid v4.4.0+incompatible
 	github.com/golang/protobuf v1.5.2
 	github.com/google/gops v0.3.27
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.15.2

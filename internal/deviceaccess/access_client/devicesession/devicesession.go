@@ -32,11 +32,16 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+const (
+	DEVICE_HEARTBEAT_SECONDS_DEFAULT = 300
+)
+
 var (
 	ErrDataType           = errors.New("ErrDataType")
 	ErrOverCapacity       = errors.New("ErrOverCapacity")
 	ErrSendTimeout        = errors.New("ErrSendTimeout")
 	ErrAuthFailed         = errors.New("ErrAuthFailed")
+	ErrPingFailed         = errors.New("ErrPingFailed")
 	ErrTransFunc          = errors.New("ErrTransFunc")
 	ErrObservaNotMatch    = errors.New("ErrObservaNotMatch")
 	ErrMethodNotMatch     = errors.New("ErrMethodNotMatch")
@@ -47,7 +52,6 @@ var (
 type DeviceSession struct {
 	deviceID           string
 	deviceSecret       string
-	ssframeChan        chan *SSFrame
 	outgoingChan       chan []byte
 	regGetHandlerMap   map[uint32]func(req []byte) ([]byte, error)
 	regPostHandlerMap  map[uint32]func(req []byte) ([]byte, error)
@@ -55,63 +59,67 @@ type DeviceSession struct {
 	sendIDStore        *timekv.TimeKV
 	rollingHeaderID    atomic.Uint32 // rolling number for header id
 	conn               net.Conn
+	heartbeatSeconds   uint16
+	reconnectTimes     uint16
 }
 
-type SSFrame struct { // Server Send Frame
-	ID    uint16
-	data  []byte
-	trans func([]byte)
-}
-
-func NewSSFrame(id uint16, data []byte, trans func([]byte)) *SSFrame {
-	return &SSFrame{
-		ID:    id,
-		data:  data,
-		trans: trans,
-	}
-}
-func (f *SSFrame) GetRequest() []byte {
-	return f.data
-}
-func (f *SSFrame) SetResponse(data []byte) error {
-	resp := &dp.SendResp{
-		Header: &dp.Header{
-			Version: dp.Version,
-			ID:      f.ID,
-			Type:    dp.MsgType_ServerSendResp,
-			BodyLen: 0, // auto update when endoce
-			Code:    dp.Code_Success,
-		},
-		Body: data,
-	}
-
-	buf, err := dp.EncodeSendResp(resp)
+func Connect(ctx context.Context, deviceID, deviceSecret, serverAddr string) (*DeviceSession, error) {
+	conn, err := net.DialTimeout("tcp", serverAddr, time.Second*60)
 	if err != nil {
-		log.Error().Err(err).Msg("SetResponse")
-		return err
+		log.Error().Err(err).Msg("connect server error")
+		return nil, err
 	}
+	session := NewDeviceSession(conn, deviceID, deviceSecret)
+	errChan := make(chan error, 1)
+	go session.serve(ctx, errChan)
+	go session.recover(ctx, serverAddr, errChan)
+	return session, nil
+}
 
-	if nil == f.trans {
-		log.Error().Err(ErrTransFunc).Msg("SetResponse")
-		return ErrTransFunc
+func ConnectWithLocalAddr(ctx context.Context, deviceID, deviceSecret, localAddr, serverAddr string) (*DeviceSession, error) {
+	laddr, err := net.ResolveTCPAddr("tcp", localAddr)
+	if err != nil {
+		log.Error().Err(err).Msg("localAddr error")
+		return nil, err
 	}
-	f.trans(buf)
-	return nil
+	dialer := net.Dialer{LocalAddr: laddr, Timeout: time.Second * 60}
+	conn, err := dialer.Dial("tcp", serverAddr)
+	if err != nil { // max try 2 times
+		log.Error().Str("deviceid", deviceID).Uint16("retrytimes", 1).Err(err).Msg("connect server error, reconnect after 3s")
+		time.Sleep(time.Second * 3)
+		conn, err = dialer.Dial("tcp", serverAddr)
+		if err != nil {
+			log.Error().Str("deviceid", deviceID).Uint16("retrytimes", 2).Err(err).Msg("connect server error, reconnect after 9s")
+			time.Sleep(time.Second * 9)
+			conn, err = dialer.Dial("tcp", serverAddr)
+			if err != nil {
+				log.Error().Str("deviceid", deviceID).Err(err).Msg("connect server error, do not retry again")
+				return nil, err
+			}
+		}
+	}
+	session := NewDeviceSession(conn, deviceID, deviceSecret)
+	errChan := make(chan error, 1)
+	go session.serve(ctx, errChan)
+	go session.recover(ctx, serverAddr, errChan)
+	return session, nil
 }
 
 func NewDeviceSession(conn net.Conn, deviceId, deviceSecret string) *DeviceSession {
 	s := &DeviceSession{
 		deviceID:           deviceId,
 		deviceSecret:       deviceSecret,
-		ssframeChan:        make(chan *SSFrame, 10),
 		outgoingChan:       make(chan []byte, 10),
 		sendIDStore:        timekv.NewTimeKV(time.Second * 120),
 		regGetHandlerMap:   make(map[uint32]func(req []byte) ([]byte, error), 1),
 		regPostHandlerMap:  make(map[uint32]func(req []byte) ([]byte, error), 1),
 		regObGetHandlerMap: make(map[uint32]func(ctx context.Context, req []byte) (<-chan []byte, error), 1),
 		conn:               conn,
+		heartbeatSeconds:   DEVICE_HEARTBEAT_SECONDS_DEFAULT,
+		reconnectTimes:     0,
 	}
 	s.rollingHeaderID.Store(0)
+
 	return s
 }
 
@@ -142,6 +150,74 @@ func (s *DeviceSession) auth() error {
 	s.outgoingChan <- buf
 	return nil
 }
+func (s *DeviceSession) ping() error { // heartbeat: 0 - not update, other - using heartbeat as new value
+	headerID, err := ru.GenUint16ID()
+	if err != nil {
+		return err
+	}
+	req := &dp.PingReq{
+		Header: &dp.Header{
+			Version: dp.Version,
+			Type:    dp.MsgType_DevicePingReq,
+			ID:      headerID,
+		},
+		Timeout: 0,
+	}
+
+	buf, err := dp.EncodePingReq(req)
+	if err != nil {
+		return err
+	}
+	s.outgoingChan <- buf
+	return nil
+}
+func (s *DeviceSession) pingRemoteSet(timeout uint16) error { // timeout [30, 43200]
+	headerID, err := ru.GenUint16ID()
+	if err != nil {
+		return err
+	}
+	req := &dp.PingReq{
+		Header: &dp.Header{
+			Version: dp.Version,
+			Type:    dp.MsgType_DevicePingReq,
+			ID:      headerID,
+		},
+		Timeout: timeout,
+	}
+
+	buf, err := dp.EncodePingReq(req)
+	if err != nil {
+		return err
+	}
+	s.outgoingChan <- buf
+	return nil
+}
+
+// interval : [2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768 ...] secodes
+// level    :  0, 1, 2,  3,  4,  5,   6,   7,   8,    9,   10,   11,   12,    13,    14
+// recommend: set maxlevel=8 (max retry intervel is 8.5 minite)
+func (s *DeviceSession) getReconnectInterval(maxLevel uint16) time.Duration {
+	n := maxLevel
+	if s.reconnectTimes < n {
+		n = s.reconnectTimes
+	}
+	return 2 << n
+}
+func (s *DeviceSession) reconnect(ctx context.Context, serverAddr string, errChan chan<- error) uint16 {
+	s.reconnectTimes++
+	conn, err := net.DialTimeout("tcp", serverAddr, time.Second*60)
+	if err != nil {
+		log.Error().Str("deviceid", s.deviceID).Uint16("retrytimes", s.reconnectTimes).Err(err).Msg("Reconnect server error")
+		errChan <- err
+		return s.reconnectTimes
+	}
+	s.reconnectTimes = 0 // connect sucess and reset to 0
+	s.conn = conn
+	log.Info().Str("deviceid", s.deviceID).Uint16("retrytimes", s.reconnectTimes).Msg("Reconnect server success")
+	go s.serve(ctx, errChan)
+	return s.reconnectTimes
+}
+
 func (s *DeviceSession) sendCoReq(headerID uint16, method dp.Method, uri uint32, data []byte) (<-chan []byte, error) {
 	req := &dp.CoReq{
 		HeaderID: headerID,
@@ -350,7 +426,7 @@ func (s *DeviceSession) coGetReqHandler(header *dp.Header, reqBuf []byte) error 
 	if !ok {
 		log.Warn().Uint16("headerid", req.HeaderID).Uint32("uri", req.URI).Msg("coGetReqHandler, uri not found")
 		resp.Code = dp.StatusCode_NotFount
-		buf := make([]byte, int(dp.HeaderLen+dp.HeaderLen_CoReq))
+		buf := make([]byte, int(dp.HeaderLen+dp.HeaderLen_CoResp))
 		if err := dp.EncodeCoResp_OverServerSendResp(resp, buf); err != nil {
 			log.Error().Uint16("headerid", req.HeaderID).Err(err).Msg("coGetReqHandler")
 			return err
@@ -389,7 +465,7 @@ func (s *DeviceSession) coPostReqHandler(header *dp.Header, reqBuf []byte) error
 	if !ok {
 		log.Warn().Uint16("headerid", req.HeaderID).Uint32("uri", req.URI).Msg("coGetReqHandler, uri not found")
 		resp.Code = dp.StatusCode_NotFount
-		buf := make([]byte, int(dp.HeaderLen+dp.HeaderLen_CoReq))
+		buf := make([]byte, int(dp.HeaderLen+dp.HeaderLen_CoResp))
 		if err := dp.EncodeCoResp_OverServerSendResp(resp, buf); err != nil {
 			log.Error().Uint16("headerid", req.HeaderID).Err(err).Msg("coGetReqHandler")
 			return err
@@ -504,11 +580,18 @@ func (s *DeviceSession) tcpIncomming(ctx context.Context, errChan chan<- error) 
 				if header.Code == dp.Code_Success {
 					log.Info().Msg("auth pass")
 				} else {
-					log.Error().Str("resp.type", string(header.Code)).Msg("auth fail")
+					log.Error().Uint8("resp.code", uint8(header.Code)).Msg("auth fail")
 					errChan <- ErrAuthFailed
 					return
 				}
 			case dp.MsgType_DevicePingResp:
+				if header.Code == dp.Code_Success {
+					log.Info().Msg("ping success")
+				} else {
+					log.Error().Uint8("resp.code", uint8(header.Code)).Msg("ping fail")
+					errChan <- ErrPingFailed
+					return
+				}
 			case dp.MsgType_ServerSendReq:
 				err := s.serverSendRequest(header)
 				if err != nil {
@@ -530,7 +613,7 @@ func (s *DeviceSession) tcpIncomming(ctx context.Context, errChan chan<- error) 
 	}
 }
 
-func (s *DeviceSession) tcpOutgoing(ctx context.Context, errChan chan<- error) {
+func (s *DeviceSession) tcpOutgoing(ctx context.Context, heartbeat *time.Ticker, errChan chan<- error) {
 	defer func() {
 		log.Debug().Msg("tcpOutgoing exit")
 	}()
@@ -541,6 +624,7 @@ func (s *DeviceSession) tcpOutgoing(ctx context.Context, errChan chan<- error) {
 			log.Debug().Msg("tcpOutgoing context done")
 			return
 		case buf := <-s.outgoingChan:
+			heartbeat.Reset(time.Second * time.Duration(s.heartbeatSeconds))
 			if n, err := ru.WriteFull(s.conn, buf); err != nil {
 				log.Error().Err(err).Int("writelen", n).Int("buflen", len(buf)).Msg("tcpOutgoing WriteFull error")
 				errChan <- err
@@ -550,7 +634,7 @@ func (s *DeviceSession) tcpOutgoing(ctx context.Context, errChan chan<- error) {
 	}
 }
 
-func (s *DeviceSession) Serve(ctx context.Context, errChan chan<- error) {
+func (s *DeviceSession) serve(ctx context.Context, errChan chan<- error) {
 
 	devicelogger := log.With().Str("device_ip", s.conn.LocalAddr().String()).Logger()
 	devicelogger.Info().Str("deviceid", s.deviceID).Msg("serving")
@@ -558,20 +642,27 @@ func (s *DeviceSession) Serve(ctx context.Context, errChan chan<- error) {
 		devicelogger.Info().Msg("stop serving")
 	}()
 
-	deviceCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
+	ioCtx, ioCancel := context.WithCancel(ctx)
+	defer ioCancel()
+
+	heartbeat := time.NewTicker(time.Second * time.Duration(s.heartbeatSeconds))
+	defer heartbeat.Stop()
 
 	errNetChan := make(chan error, 2)
-	go s.tcpIncomming(deviceCtx, errNetChan)
-	go s.tcpOutgoing(deviceCtx, errNetChan)
+	go s.tcpIncomming(ioCtx, errNetChan)
+	go s.tcpOutgoing(ioCtx, heartbeat, errNetChan)
 
 	if err := s.auth(); err != nil {
 		log.Error().Err(err).Msg("send auth error")
 		return
 	}
 
-	heartbeat := time.NewTicker(time.Second * 5)
-	defer heartbeat.Stop()
+	// device define heartbeat's timeout
+	s.heartbeatSeconds = 60
+	if s.heartbeatSeconds != DEVICE_HEARTBEAT_SECONDS_DEFAULT {
+		s.pingRemoteSet(s.heartbeatSeconds)
+	}
+
 	storeTicker := time.NewTicker(time.Second * 5)
 	defer storeTicker.Stop()
 
@@ -580,16 +671,19 @@ func (s *DeviceSession) Serve(ctx context.Context, errChan chan<- error) {
 		case err := <-errNetChan:
 			errChan <- err
 			log.Error().Err(err).Msg("device done when error")
-			cancel()
+			s.conn.Close()
+			ioCancel()
 			return
-		case <-deviceCtx.Done():
+		case <-ioCtx.Done():
 			log.Debug().Msg("device done when deviceCtx done")
-			if err := s.conn.Close(); err != nil {
-				log.Warn().Err(err).Msg("device close conn error")
-			}
+			s.conn.Close()
+			// if err := s.conn.Close(); err != nil {
+			// 	log.Warn().Err(err).Msg("device close conn error")
+			// }
 			return
 		case <-heartbeat.C:
-			// devicelogger.Debug().Msgf("heartbeat.C %s", time.Now().String())
+			devicelogger.Debug().Msgf("ping req")
+			s.ping()
 
 		case <-storeTicker.C:
 			// servelogger.Debug().Msgf("storeTicker.C %s", time.Now().String())
@@ -598,6 +692,18 @@ func (s *DeviceSession) Serve(ctx context.Context, errChan chan<- error) {
 	}
 }
 
-func (s *DeviceSession) SSFrames() <-chan *SSFrame {
-	return s.ssframeChan
+func (s *DeviceSession) recover(ctx context.Context, serverAddr string, errChan chan error) {
+	for {
+		select {
+		case <-ctx.Done():
+			log.Info().Msg("recover ctx done")
+			return
+		case err := <-errChan:
+			log.Error().Err(err).Msg("recover, reconnect later ")
+			time.AfterFunc(time.Second*s.getReconnectInterval(6), func() {
+				s.reconnect(ctx, serverAddr, errChan)
+			})
+		}
+
+	}
 }
