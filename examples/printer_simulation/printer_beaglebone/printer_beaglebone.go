@@ -27,6 +27,7 @@ import (
 	"flag"
 	"os/signal"
 	ds "rtio2/internal/deviceaccess/access_client/devicesession"
+	"rtio2/pkg/config"
 	"rtio2/pkg/logsettings"
 
 	"strconv"
@@ -122,29 +123,17 @@ func virtalDeviceRun(ctx context.Context, wait *sync.WaitGroup, deviceID, device
 	// URI: /printer/status 0x781495e7
 	session.RegisterObGetHandler(0x781495e7, handerStatus)
 
-	t := time.NewTicker(time.Second * 60)
-	defer t.Stop()
+	session.Serve(ctx)
 
-	for {
-		select {
-		case <-ctx.Done():
-			log.Info().Msg("ctx done")
-			return
-		case <-t.C:
-			log.Debug().Str("virtalDeviceRun now", time.Now().String())
-			resp, err := session.Post(0x7c88eed8, []byte("this a event"), time.Second*20)
-			if err != nil {
-				log.Error().Err(err).Msg("")
-			} else {
-				log.Info().Str("resp", string(resp)).Msg("")
-			}
-		}
-	}
+	<-ctx.Done()
+	log.Debug().Msg("ctx done")
 }
 
 func main() {
-
+	config.StringKV.Set("log.format", "text")
+	config.StringKV.Set("log.level", "info")
 	logsettings.Set()
+
 	serverAddr := flag.String("server", "localhost:17017", "server address")
 	flag.Parse()
 
@@ -157,5 +146,5 @@ func main() {
 	go virtalDeviceRun(ctx, wait, "cfa09baa-4913-4ad7-a936-2e26f9671b04", "mb6bgso4EChvyzA05thF9+wH", *serverAddr)
 
 	wait.Wait()
-	log.Error().Msg("client exit")
+	log.Info().Msg("client exit")
 }

@@ -19,16 +19,16 @@ package logsettings
 
 import (
 	"os"
+	"rtio2/pkg/config"
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
 
 func Set() {
-	jsonFormat := os.Getenv("RTIO_LOG_JSON") // true, false, other as false
-	logLevel := os.Getenv("RTIO_LOG_LEVEL")  // debug, info, warn, error, other as debug
-
-	if jsonFormat != "true" {
+	logFormat := config.StringKV.GetWithDefault("log.format", "text")
+	logLevel := config.StringKV.GetWithDefault("log.level", "warn")
+	if logFormat != "json" {
 		log.Logger = zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: "2006-01-02 15:04:05.000"}).With().Caller().Timestamp().Logger()
 	} else {
 		log.Logger = zerolog.New(os.Stderr).With().Caller().Timestamp().Logger()

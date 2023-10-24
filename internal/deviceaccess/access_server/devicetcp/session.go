@@ -24,8 +24,10 @@ import (
 	"io"
 	"net"
 	"rtio2/internal/deviceaccess/access_server/backendconn"
+	"rtio2/pkg/config"
 	dp "rtio2/pkg/deviceproto"
-	"rtio2/pkg/rpcproto/resource"
+	"rtio2/pkg/rpcproto/deviceservice"
+	"rtio2/pkg/rpcproto/deviceverifier"
 
 	ru "rtio2/pkg/rtioutils"
 	"rtio2/pkg/timekv"
@@ -45,6 +47,7 @@ const (
 var (
 	OutgoingChanSize = 10
 
+	ErrRtioInternalServerError = errors.New("ErrRtioInternalServerError")
 	ErrSessionNotFound         = errors.New("ErrSessionNotFound")
 	ErrDataType                = errors.New("ErrDataType")
 	ErrOverCapacity            = errors.New("ErrOverCapacity")
@@ -105,25 +108,25 @@ type Observa struct { // Observation
 	SessionDoneChan chan struct{}
 }
 
-func transToDeviceCode(code resource.Code) dp.StatusCode {
+func transToDeviceCode(code deviceservice.Code) dp.StatusCode {
 	switch code {
-	case resource.Code_CODE_INTERNAL_SERVER_ERROR:
+	case deviceservice.Code_CODE_INTERNAL_SERVER_ERROR:
 		return dp.StatusCode_InternalServerError
-	case resource.Code_CODE_OK:
+	case deviceservice.Code_CODE_OK:
 		return dp.StatusCode_OK
-	case resource.Code_CODE_CONTINUE:
+	case deviceservice.Code_CODE_CONTINUE:
 		return dp.StatusCode_Continue
-	case resource.Code_CODE_TERMINATE:
+	case deviceservice.Code_CODE_TERMINATE:
 		return dp.StatusCode_Terminate
-	case resource.Code_CODE_NOT_FOUNT:
+	case deviceservice.Code_CODE_NOT_FOUNT:
 		return dp.StatusCode_NotFount
-	case resource.Code_CODE_BAD_REQUEST:
+	case deviceservice.Code_CODE_BAD_REQUEST:
 		return dp.StatusCode_BadRequest
-	case resource.Code_CODE_METHOD_NOT_ALLOWED:
+	case deviceservice.Code_CODE_METHOD_NOT_ALLOWED:
 		return dp.StatusCode_MethodNotAllowed
-	case resource.Code_CODE_TOO_MANY_REQUESTS:
+	case deviceservice.Code_CODE_TOO_MANY_REQUESTS:
 		return dp.StatusCode_TooManyRequests
-	case resource.Code_CODE_TOO_MANY_OBSERVATIONS:
+	case deviceservice.Code_CODE_TOO_MANY_OBSERVATIONS:
 		return dp.StatusCode_TooManyObservations
 	}
 	log.Error().Str("rpc.status", code.String()).Msg("transferRPCStatus not mapped")
@@ -337,54 +340,80 @@ func (s *Session) Cancel() {
 func (s *Session) Done() <-chan struct{} {
 	return s.done
 }
-func (s *Session) deviceAuthProcess(header *dp.Header) (bool, error) {
+func (s *Session) receiveAuthReq(ctx context.Context, header *dp.Header) (bool, error) {
 	reqBodyBuf := make([]byte, header.BodyLen)
 	readLen, err := io.ReadFull(s.conn, reqBodyBuf)
 	if err != nil {
-		log.Error().Int("readLen", readLen).Err(err).Msg("deviceAuthProcess, ReadFull")
-		return s.authPass, err
+		log.Error().Int("readLen", readLen).Err(err).Msg("receiveAuthReq, ReadFull")
+		return false, err
 	}
 	req, err := dp.DecodeAuthReqBody(header, reqBodyBuf)
-
 	if err != nil {
-		log.Error().Err(err).Msg("deviceAuthProcess, DecodeBodyAuthReq")
-		return s.authPass, err
+		log.Error().Err(err).Msg("receiveAuthReq, DecodeBodyAuthReq")
+		return false, err
 	}
-
 	if len(req.DeviceID) == 0 || len(req.DeviceSecret) == 0 {
-		log.Error().Err(ErrSessionAuthData).Msg("deviceAuthProcess, DecodeBodyAuthReq")
-		return s.authPass, ErrSessionAuthData
+		log.Error().Err(ErrSessionAuthData).Msg("receiveAuthReq, DecodeBodyAuthReq")
+		return false, s.sendAuthResp(header, dp.Code_ParaInvalid)
 	}
+	// device verify
+	if !config.BoolKV.GetWithDefault("disable.deviceverify", false) {
+		authClient, err := backendconn.GetDeviceVerifierClient()
+		if err != nil {
+			log.Error().Err(err).Msg("GetDeviceVerifierClient err")
+			return false, s.sendAuthResp(header, dp.Code_UnkownErr)
+		}
 
-	// call auth rpc with req.DeviceID req.DeviceSecret
-	// exit serve when auth err
-	// stop auth timer
-
+		id, err := ru.GenUint32ID()
+		if err != nil {
+			log.Error().Err(err).Msg("GenUint32ID err")
+			return false, s.sendAuthResp(header, dp.Code_UnkownErr)
+		}
+		verifierReq := &deviceverifier.VerifyReq{
+			Id:           id,
+			DeviceId:     req.DeviceID,
+			DeviceSecret: req.DeviceSecret,
+		}
+		VerifyResp, err := authClient.Verify(ctx, verifierReq)
+		if err != nil {
+			log.Error().Err(err).Msg("call Verify err")
+			return s.authPass, s.sendAuthResp(header, dp.Code_UnkownErr)
+		}
+		if VerifyResp.Code != deviceverifier.Code_CODE_PASS {
+			log.Error().Err(err).Str("deviceverifiercode", VerifyResp.Code.String()).Msg("receiveAuthReq")
+			return false, s.sendAuthResp(header, dp.Code_AuthFail)
+		}
+	}
+	// auth pass
 	s.authPass = true
 	s.deviceID = req.DeviceID
 	capSize, err := dp.GetCapSize(req.CapLevel)
 	if err != nil {
-		log.Error().Err(err).Msg("deviceAuthProcess, GetCapSize")
-		return s.authPass, err
+		return true, s.sendAuthResp(header, dp.Code_Success)
 	}
 	s.BodyCapSize = capSize
-	// send auth resp
+	return true, nil
+}
+
+func (s *Session) sendAuthResp(header *dp.Header, code dp.RemoteCode) error {
 	resp := &dp.AuthResp{
 		Header: &dp.Header{
 			Version: dp.Version,
 			Type:    dp.MsgType_DeviceAuthResp,
-			ID:      req.Header.ID,
+			ID:      header.ID,
 			BodyLen: 0,
-			Code:    dp.Code_Success,
+			Code:    code,
 		},
 	}
 	respBuf, err := dp.EncodeAuthResp(resp)
 	if err != nil {
-		return s.authPass, err
+		log.Error().Err(err).Msg("deviceSendAuthResp")
+		return err
 	}
 	s.outgoingChan <- respBuf
-	return s.authPass, nil
+	return nil
 }
+
 func (s *Session) devicePingProcess(header *dp.Header) error {
 
 	bodyBuf := make([]byte, header.BodyLen)
@@ -454,9 +483,9 @@ func (s *Session) serverSendRespone(header *dp.Header) error {
 	return nil
 }
 
-func (s *Session) accessResource(method dp.Method, req *resource.Req) (*resource.Resp, error) {
+func (s *Session) accessResource(method dp.Method, req *deviceservice.Req) (*deviceservice.Resp, error) {
 
-	client, err := backendconn.GetResourceServiceClient()
+	client, err := backendconn.GetDeviceServiceClient()
 	if err != nil {
 		log.Error().Err(err).Msg("accessResource")
 		return nil, ErrResourceNotFound
@@ -464,7 +493,7 @@ func (s *Session) accessResource(method dp.Method, req *resource.Req) (*resource
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
-	var resp *resource.Resp
+	var resp *deviceservice.Resp
 	if method == dp.Method_ConstrainedPost {
 		resp, err = client.Post(ctx, req)
 		if err != nil {
@@ -497,39 +526,40 @@ func (s *Session) receiveCoReq(header *dp.Header, buf []byte) error {
 		log.Error().Err(err).Msg("receiveCoReq")
 		return err
 	}
-
 	resp := &dp.CoResp{
 		HeaderID: req.HeaderID,
 		Method:   req.Method,
 	}
 
-	id, err := ru.GenUint32ID()
-	if err != nil {
-		log.Error().Err(err).Msg("receiveCoReq, GenUint32ID error")
-		resp.Code = dp.StatusCode_InternalServerError
-	}
-	resReq := &resource.Req{
-		Id:       id,
-		Uri:      req.URI,
-		DeviceId: s.deviceID,
-		Data:     req.Data,
-	}
-
-	log.Info().Uint16("headerid", req.HeaderID).Uint32("serialid", id).Uint32("uri", req.URI).Uint8("method", uint8(req.Method)).Msg("receiveCoReq")
-	resResp, err := s.accessResource(req.Method, resReq)
-
-	if err != nil {
-		if err == ErrMethodNotAllowed {
-			resp.Code = dp.StatusCode_MethodNotAllowed
-		} else if err == ErrResourceNotFound {
-			resp.Code = dp.StatusCode_NotFount
-		} else {
+	if config.BoolKV.GetWithDefault("disable.deviceservice", false) {
+		resp.Code = dp.StatusCode_MethodNotAllowed
+	} else {
+		id, err := ru.GenUint32ID()
+		if err != nil {
+			log.Error().Err(err).Msg("receiveCoReq, GenUint32ID error")
 			resp.Code = dp.StatusCode_InternalServerError
 		}
-	} else {
-		resp.Code = transToDeviceCode(resResp.Code)
-		if resp.Code == dp.StatusCode_OK {
-			resp.Data = resResp.Data
+		resReq := &deviceservice.Req{
+			Id:       id,
+			Uri:      req.URI,
+			DeviceId: s.deviceID,
+			Data:     req.Data,
+		}
+		log.Info().Uint16("headerid", req.HeaderID).Uint32("serialid", id).Uint32("uri", req.URI).Uint8("method", uint8(req.Method)).Msg("receiveCoReq")
+		resResp, err := s.accessResource(req.Method, resReq)
+		if err != nil {
+			if err == ErrMethodNotAllowed {
+				resp.Code = dp.StatusCode_MethodNotAllowed
+			} else if err == ErrResourceNotFound {
+				resp.Code = dp.StatusCode_NotFount
+			} else {
+				resp.Code = dp.StatusCode_InternalServerError
+			}
+		} else {
+			resp.Code = transToDeviceCode(resResp.Code)
+			if resp.Code == dp.StatusCode_OK {
+				resp.Data = resResp.Data
+			}
 		}
 	}
 
@@ -608,7 +638,7 @@ func (s *Session) tcpIncomming(serveCtx context.Context, addSession func(string,
 
 			switch header.Type {
 			case dp.MsgType_DeviceAuthReq:
-				if ok, err := s.deviceAuthProcess(header); err != nil {
+				if ok, err := s.receiveAuthReq(serveCtx, header); err != nil {
 					errChan <- err
 					return
 				} else {

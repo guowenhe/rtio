@@ -1,6 +1,6 @@
 # RTIO（Real Time Input Output Service for IoT）
 
-RTIO提供设备上云的端到端解决方案，主要包括设备接入、设备代理、后端资源代理等功能：
+RTIO提供设备上云的端到端解决方案，主要包括设备接入、设备代理、后端服务代理等功能：
 
 - 用户端使用HTTP GET、POST方法通过RTIO控制和实时观察设备（通常用户端下发指令、观察设备状态）
 - 设备通过GET、POST接口访问RTIO代理的资源（通常设备端获取服务端资源、上报事件）
@@ -8,15 +8,15 @@ RTIO提供设备上云的端到端解决方案，主要包括设备接入、设�
 
 ```text
                  native │ could
-                        │
-┌──────────┐ tcp/tls    │    ┌────────┐
-│ device   ├────────────┼────►        │
-└──────────┘            │    │        │       ┌──────────┐
-                        │    │  rtio  ├───────► resource │
-┌──────────┐ http/https │    │        │       └──────────┘
-│ user     ├────────────┼────►        │
-└──────────┘            │    └────────┘
- phone/web/pc...        │
+                        │     ┌───────┐     ┌──────────┐
+ ┌──────────┐ tcp/tls   │     │       ├─────► device   │
+ │ device   ├───────────┼─────►       │     │ verifier │
+ └──────────┘           │     │       │     └──────────┘
+                        │     │ RTIO  │
+ ┌──────────┐ http/https│     │       │     ┌──────────┐
+ │ user     ├───────────┼─────►       │     │ device   │
+ └──────────┘           │     │       ├─────► services │
+  phone/web/pc...       │     └───────┘     └──────────┘
 ```
 
 ## 特点
@@ -37,7 +37,7 @@ RTIO简化设备接入云端开发。设备也是服务资源的提供者，RTIO
 
 REST-Like模型，这里指类似REST模型，但不以HTTP协议作为底层协议，模型提供了GET和POST方法和ObGET（Observe-GET，观察者模式）等方法。
 
-RTIO交互示例可参考下文“RTIO和MQTT服务交互比较”。
+RTIO交互示例可参考下文[RTIO和MQTT服务交互比较](#rtio和mqtt服务交互比较)。
 
 ## 编译和运行
 
@@ -65,24 +65,21 @@ out/
 运行示例，启动rtio服务（可通过-h参数查看帮助）。
 
 ```sh
-$ ./out/rtio
-2023-07-09 10:30:47.132 INF cmd/rtio/rtio.go:65 > rtio starting ...
-
+$ ./out/rtio -disable.deviceverify -disable.deviceservice -log.level=info
+INF cmd/rtio/rtio.go:77 > rtio starting ...
 ```
 
 启动设备，模拟打印机。
 
 ```sh
 $ ./out/examples/printer
-2023-07-09 10:33:23.136 INF internal/deviceaccess/access_client/devicesession/devicesession.go:556 > serving device_ip=127.0.0.1:40878 deviceid=cfa09baa-4913-4ad7-a936-2e26f9671b04
-2023-07-09 10:33:23.137 INF internal/deviceaccess/access_client/devicesession/devicesession.go:505 > auth pass
+INF internal/deviceaccess/access_client/devicesession/devicesession.go:675 > serving 
 ```
 
 模拟用户端，下达开始打印指令。
 
 ```sh
-$ curl -X POST "http://127.0.0.1:17317/cfa09baa-4913-4ad7-a936-2e26f9671b04/post_handler" -d '{"uri":"/printer/action","id":12667,"data":"c3Rhcn
-Q="}'
+$ curl -X POST "http://127.0.0.1:17317/cfa09baa-4913-4ad7-a936-2e26f9671b04/post_handler" -d '{"uri":"/printer/action","id":12667,"data":"c3RhcnQ="}'
 {"id":12667,"code":"CODE_OK","data":"cHJpbnQgc3RhcnRlZA=="} # 
 ```
 
@@ -101,7 +98,7 @@ $ curl -X GET "http://127.0.0.1:17317/cfa09baa-4913-4ad7-a936-2e26f9671b04/obget
 {"result":{"id":12334,"fid":22,"code":"CODE_TERMINATE","data":""}}
 ```
 
-## 集成示例
+## 设备端集成说明
 
 设备端代码，handler实现：
 
@@ -130,37 +127,39 @@ func handerStatus(ctx context.Context, req []byte) (<-chan []byte, error) {
 设备端代码，给URI注册handler：
 
 ```golang
- deviceSession := ds.NewDeviceSession(conn, deviceID, deviceSecret)
+session := ds.NewDeviceSession(conn, deviceID, deviceSecret)
  ...
  // URI: /printer/action 0x44d87c69
- deviceSession.RegisterPostHandler(0x44d87c69, handlerAction)
+ session.RegisterPostHandler(0x44d87c69, handlerAction)
  // URI: /printer/status 0x781495e7
- deviceSession.RegisterObGetHandler(0x781495e7, handerStatus)
+ session.RegisterObGetHandler(0x781495e7, handerStatus)
 
 ```
 
-注：GET/POST每次交互都带有URI标识，为压缩URI数据量，交互过程采用4字节的哈希摘要（CRC32）进行通信。
+备注：
 
-用户端Javascript参考：[user.html](examples/printer_simulation/user_html/user.html)
+- 设备集成具体步骤参见[设备SDK](#设备sdk)。
+- GET/POST每次交互都带有URI标识，为压缩URI数据量，设备和RTIO服务交互过程采用4字节的哈希摘要（CRC32）通信，可使用[rtio-urihash](https://github.com/guowenhe/rtio-urihash)工具计算。
+- 用户端Javascript可参考：[user.html](examples/printer_simulation/user_html/user.html)。
 
+## 设备SDK
 
-<!-- ### docker安装 -->
+- [rtio-device-sdk-go](https://github.com/guowenhe/rtio-device-sdk-go) 支持Golang
 
-<!-- ### k8s安装 -->
+## 项目进展
 
-<!-- ## 性能 -->
+目前完成设备端到服务端接入和Demo示例，rtio核心部分：
 
-<!-- ## 客户端SDK -->
-
-## 项目进度和计划
-
-目前仅完成设备端到服务端接入和Demo示例，rtio核心部分。（未完成后端资源自动注册等功能、设备auth接口、用户端认证功能）
+- HTTP远程调用设备端资源（Get、Post、ObGet）
+- 设备端调用后端服务资源（Get、Post）
 
 ## FQA
 
 1. RTIO和MQTT服务有何不同？
 
     他们都能与NAT后面的设备通信，MQTT为发布订阅模型，是多对多的模型，RTIO是点对点模型。
+
+    点对点通信场景中，MQTT通常需要定义一对topic（\*_req和\*_resp）来实现请求和响应，而这对topic相关的处理函数（Handler）耦合在两个系统中。RTIO通过URI标识不同资源或能力，解耦资源实现和资源调用者。
 
 2. 什么场景选择点对点通信？U2M（User To Machine）选择哪种模型更合适？
 

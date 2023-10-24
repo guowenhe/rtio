@@ -19,10 +19,9 @@
 package backendconn
 
 import (
-	"errors"
-	"os"
-
-	"rtio2/pkg/rpcproto/resource"
+	"rtio2/pkg/config"
+	"rtio2/pkg/rpcproto/deviceservice"
+	"rtio2/pkg/rpcproto/deviceverifier"
 
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
@@ -30,9 +29,13 @@ import (
 )
 
 var (
-	ErrResourceNotFound = errors.New("ErrResourceNotFound")
-	resourceServiceAddr string
-	resourceServiceConn *grpc.ClientConn
+	serviceAddr string
+	serviceConn *grpc.ClientConn
+)
+
+var (
+	verifierAddr string
+	verifierConn *grpc.ClientConn
 )
 
 func dial(addr string) (*grpc.ClientConn, error) {
@@ -49,32 +52,47 @@ func dial(addr string) (*grpc.ClientConn, error) {
 
 }
 
-func GetResourceServiceClient() (resource.ResourceServiceClient, error) {
+func GetDeviceServiceClient() (deviceservice.DeviceServiceClient, error) {
 
-	if resourceServiceConn != nil {
-		return resource.NewResourceServiceClient(resourceServiceConn), nil
+	if serviceConn != nil {
+		return deviceservice.NewDeviceServiceClient(serviceConn), nil
 	}
 	var err error
-	resourceServiceConn, err = dial(resourceServiceAddr)
+	serviceConn, err = dial(serviceAddr)
 	if err != nil {
-		log.Error().Err(err).Str("addr", resourceServiceAddr).Msg("resource service reconnect failed")
+		log.Error().Err(err).Str("addr", serviceAddr).Msg("device service reconnect failed")
 		return nil, err
 	} else {
-		return resource.NewResourceServiceClient(resourceServiceConn), nil
+		return deviceservice.NewDeviceServiceClient(serviceConn), nil
+	}
+}
+
+func GetDeviceVerifierClient() (deviceverifier.VerifierServiceClient, error) {
+
+	if verifierConn != nil {
+		return deviceverifier.NewVerifierServiceClient(verifierConn), nil
+	}
+	var err error
+	verifierConn, err = dial(verifierAddr)
+	if err != nil {
+		log.Error().Err(err).Str("addr", verifierAddr).Msg("deviceVerifier service reconnect failed")
+		return nil, err
+	} else {
+		return deviceverifier.NewVerifierServiceClient(verifierConn), nil
 	}
 }
 
 func InitBackendConnn() {
-
-	resourceServiceAddr = os.Getenv("RTIO_RESOURCE_SERVICE_ADDR") // example "127.0.0.1:17912"
-
-	if len(resourceServiceAddr) == 0 {
-		log.Info().Msg("using DNS [rtio-resource:17912] connect to rtio-resource service")
-		resourceServiceAddr = "rtio-resource:17912"
-	}
 	var err error
-	resourceServiceConn, err = dial(resourceServiceAddr)
+	serviceAddr = config.StringKV.GetWithDefault("backend.deviceservice", "deviceservice.rtio:17912")
+	serviceConn, err = dial(serviceAddr)
 	if err != nil {
-		log.Error().Err(err).Str("addr", resourceServiceAddr).Msg("resource service conn failed")
+		log.Error().Err(err).Str("addr", serviceAddr).Msg("device service conn failed")
+	}
+
+	verifierAddr = config.StringKV.GetWithDefault("backend.deviceverifier", "deviceverifier.rtio:17915")
+	verifierConn, err = dial(verifierAddr)
+	if err != nil {
+		log.Error().Err(err).Str("addr", verifierAddr).Msg("deviceVerifier service conn failed")
 	}
 }

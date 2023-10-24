@@ -118,6 +118,25 @@ func (s *DeviceSession) Get(uri uint32, Req []byte, timeout time.Duration) ([]by
 	}
 	return data, transToSDKError(statusCode)
 }
+func (s *DeviceSession) Get2(ctx context.Context, uri uint32, Req []byte, timeout time.Duration) ([]byte, error) {
+	headerID := s.genHeaderID()
+	respChan, err := s.sendCoReq(headerID, dp.Method_ConstrainedGet, uri, Req)
+	if err != nil {
+		log.Error().Err(err).Msg("Get")
+		return nil, ErrInternel
+	}
+	statusCode, data, err := s.receiveCoResp2(ctx, headerID, respChan, timeout)
+	if err != nil {
+		if err == ErrSendTimeout {
+			log.Error().Err(err).Msg("Get")
+			return nil, ErrRequestTimeout
+		}
+		log.Error().Err(err).Msg("Get")
+		return nil, ErrInternel
+	}
+	return data, transToSDKError(statusCode)
+}
+
 func (s *DeviceSession) Post(uri uint32, Req []byte, timeout time.Duration) ([]byte, error) {
 	headerID := s.genHeaderID()
 	respChan, err := s.sendCoReq(headerID, dp.Method_ConstrainedPost, uri, Req)
@@ -126,6 +145,25 @@ func (s *DeviceSession) Post(uri uint32, Req []byte, timeout time.Duration) ([]b
 		return nil, ErrInternel
 	}
 	statusCode, data, err := s.receiveCoResp(headerID, respChan, timeout)
+	if err != nil {
+		if err == ErrSendTimeout {
+			log.Error().Err(err).Msg("Post")
+			return nil, ErrRequestTimeout
+		}
+		log.Error().Err(err).Msg("Post")
+		return nil, ErrInternel
+	}
+	return data, transToSDKError(statusCode)
+}
+
+func (s *DeviceSession) Post2(ctx context.Context, uri uint32, Req []byte, timeout time.Duration) ([]byte, error) {
+	headerID := s.genHeaderID()
+	respChan, err := s.sendCoReq(headerID, dp.Method_ConstrainedPost, uri, Req)
+	if err != nil {
+		log.Error().Err(err).Msg("Post")
+		return nil, ErrInternel
+	}
+	statusCode, data, err := s.receiveCoResp2(ctx, headerID, respChan, timeout)
 	if err != nil {
 		if err == ErrSendTimeout {
 			log.Error().Err(err).Msg("Post")

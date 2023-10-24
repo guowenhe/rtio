@@ -89,7 +89,7 @@ func (s *ServerTCP) Serve(c context.Context) {
 				log.Debug().Msg("context done")
 				break EXIT_LOOPY
 			case <-t.C:
-				log.Error().Int32("sessionnum", s.sessionNum).Msg("")
+				// log.Error().Int32("sessionnum", s.sessionNum).Msg("") // for stress
 			}
 		}
 		s.Shutdown()

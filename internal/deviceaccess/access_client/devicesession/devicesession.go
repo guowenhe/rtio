@@ -40,6 +40,7 @@ var (
 	ErrDataType           = errors.New("ErrDataType")
 	ErrOverCapacity       = errors.New("ErrOverCapacity")
 	ErrSendTimeout        = errors.New("ErrSendTimeout")
+	ErrCanceled           = errors.New("ErrCanceled")
 	ErrAuthFailed         = errors.New("ErrAuthFailed")
 	ErrPingFailed         = errors.New("ErrPingFailed")
 	ErrTransFunc          = errors.New("ErrTransFunc")
@@ -52,7 +53,9 @@ var (
 type DeviceSession struct {
 	deviceID           string
 	deviceSecret       string
+	serverAddr         string
 	outgoingChan       chan []byte
+	errChan            chan error
 	regGetHandlerMap   map[uint32]func(req []byte) ([]byte, error)
 	regPostHandlerMap  map[uint32]func(req []byte) ([]byte, error)
 	regObGetHandlerMap map[uint32]func(ctx context.Context, req []byte) (<-chan []byte, error)
@@ -69,10 +72,7 @@ func Connect(ctx context.Context, deviceID, deviceSecret, serverAddr string) (*D
 		log.Error().Err(err).Msg("connect server error")
 		return nil, err
 	}
-	session := NewDeviceSession(conn, deviceID, deviceSecret)
-	errChan := make(chan error, 1)
-	go session.serve(ctx, errChan)
-	go session.recover(ctx, serverAddr, errChan)
+	session := newDeviceSession(conn, deviceID, deviceSecret, serverAddr)
 	return session, nil
 }
 
@@ -84,6 +84,7 @@ func ConnectWithLocalAddr(ctx context.Context, deviceID, deviceSecret, localAddr
 	}
 	dialer := net.Dialer{LocalAddr: laddr, Timeout: time.Second * 60}
 	conn, err := dialer.Dial("tcp", serverAddr)
+
 	if err != nil { // max try 2 times
 		log.Error().Str("deviceid", deviceID).Uint16("retrytimes", 1).Err(err).Msg("connect server error, reconnect after 3s")
 		time.Sleep(time.Second * 3)
@@ -98,18 +99,18 @@ func ConnectWithLocalAddr(ctx context.Context, deviceID, deviceSecret, localAddr
 			}
 		}
 	}
-	session := NewDeviceSession(conn, deviceID, deviceSecret)
-	errChan := make(chan error, 1)
-	go session.serve(ctx, errChan)
-	go session.recover(ctx, serverAddr, errChan)
+
+	session := newDeviceSession(conn, deviceID, deviceSecret, serverAddr)
 	return session, nil
 }
 
-func NewDeviceSession(conn net.Conn, deviceId, deviceSecret string) *DeviceSession {
+func newDeviceSession(conn net.Conn, deviceId, deviceSecret, serverAddr string) *DeviceSession {
 	s := &DeviceSession{
 		deviceID:           deviceId,
 		deviceSecret:       deviceSecret,
+		serverAddr:         serverAddr,
 		outgoingChan:       make(chan []byte, 10),
+		errChan:            make(chan error, 1),
 		sendIDStore:        timekv.NewTimeKV(time.Second * 120),
 		regGetHandlerMap:   make(map[uint32]func(req []byte) ([]byte, error), 1),
 		regPostHandlerMap:  make(map[uint32]func(req []byte) ([]byte, error), 1),
@@ -122,7 +123,10 @@ func NewDeviceSession(conn net.Conn, deviceId, deviceSecret string) *DeviceSessi
 
 	return s
 }
-
+func (s *DeviceSession) Serve(ctx context.Context) {
+	go s.serve(ctx, s.errChan)
+	go s.recover(ctx, s.errChan)
+}
 func (s *DeviceSession) genHeaderID() uint16 {
 	return uint16(s.rollingHeaderID.Add(1))
 }
@@ -261,6 +265,37 @@ func (s *DeviceSession) receiveCoResp(headerID uint16, respChan <-chan []byte, t
 	case <-t.C:
 		log.Error().Err(ErrSendTimeout).Msg("receiveCoResp")
 		return dp.StatusCode_Unknown, nil, ErrSendTimeout
+	}
+}
+
+func (s *DeviceSession) receiveCoResp2(ctx context.Context, headerID uint16, respChan <-chan []byte, timeout time.Duration) (dp.StatusCode, []byte, error) {
+	defer s.sendIDStore.Del(timekv.Key(headerID))
+	t := time.NewTimer(timeout)
+	defer t.Stop()
+	select {
+	case sendRespBody, ok := <-respChan:
+		if !ok {
+			log.Error().Err(ErrSendRespChannClose).Msg("receiveCoResp")
+			return dp.StatusCode_Unknown, nil, ErrSendRespChannClose
+		}
+		coResp, err := dp.DecodeCoResp(headerID, sendRespBody)
+		if err != nil {
+			log.Error().Err(err).Msg("receiveCoResp")
+			return dp.StatusCode_Unknown, nil, err
+		}
+		if coResp.Method != dp.Method_ConstrainedGet && coResp.Method != dp.Method_ConstrainedPost {
+			log.Error().Err(ErrMethodNotMatch).Msg("receiveCoResp")
+			return dp.StatusCode_InternalServerError, nil, ErrMethodNotMatch
+		}
+		log.Info().Uint16("headerid", coResp.HeaderID).Str("status", coResp.Code.String()).Msg("receiveCoResp")
+
+		return coResp.Code, coResp.Data, nil
+	case <-t.C:
+		log.Error().Err(ErrSendTimeout).Msg("receiveCoResp")
+		return dp.StatusCode_Unknown, nil, ErrSendTimeout
+	case <-ctx.Done():
+		log.Info().Msg("context done")
+		return dp.StatusCode_Unknown, nil, ErrCanceled
 	}
 }
 
@@ -586,7 +621,7 @@ func (s *DeviceSession) tcpIncomming(ctx context.Context, errChan chan<- error) 
 				}
 			case dp.MsgType_DevicePingResp:
 				if header.Code == dp.Code_Success {
-					log.Info().Msg("ping success")
+					log.Debug().Msg("ping success")
 				} else {
 					log.Error().Uint8("resp.code", uint8(header.Code)).Msg("ping fail")
 					errChan <- ErrPingFailed
@@ -692,7 +727,7 @@ func (s *DeviceSession) serve(ctx context.Context, errChan chan<- error) {
 	}
 }
 
-func (s *DeviceSession) recover(ctx context.Context, serverAddr string, errChan chan error) {
+func (s *DeviceSession) recover(ctx context.Context, errChan chan error) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -701,7 +736,7 @@ func (s *DeviceSession) recover(ctx context.Context, serverAddr string, errChan 
 		case err := <-errChan:
 			log.Error().Err(err).Msg("recover, reconnect later ")
 			time.AfterFunc(time.Second*s.getReconnectInterval(6), func() {
-				s.reconnect(ctx, serverAddr, errChan)
+				s.reconnect(ctx, s.serverAddr, errChan)
 			})
 		}
 

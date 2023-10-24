@@ -24,52 +24,36 @@ import (
 	"fmt"
 	"net"
 
+	"rtio2/pkg/config"
 	"rtio2/pkg/logsettings"
-	"rtio2/pkg/rpcproto/resource"
+	"rtio2/pkg/rpcproto/deviceverifier"
 
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
 )
 
 var (
-	port = flag.Int("port", 17912, "The server port")
+	port = flag.Int("port", 17915, "The server port")
 )
 
 type server struct {
-	resource.UnimplementedResourceServiceServer
+	deviceverifier.UnimplementedVerifierServiceServer
 }
 
-func (s *server) Get(ctx context.Context, req *resource.Req) (*resource.Resp, error) {
-	log.Info().Uint32("id", req.Id).Str("DeviceID", req.DeviceId).Msg("Get")
-
-	log.Debug().Uint32("id", req.Id).Str("DeviceID", req.DeviceId).Str("req", string(req.Data)).Msg("Get")
-	resp := &resource.Resp{
+func (s *server) Verify(ctx context.Context, req *deviceverifier.VerifyReq) (*deviceverifier.VerifyResp, error) {
+	log.Info().Uint32("id", req.Id).Str("DeviceID", req.DeviceId).Str("DeviceSecret", string(req.DeviceSecret)[len(req.DeviceSecret)-6:]).Msg("Verifier")
+	resp := &deviceverifier.VerifyResp{
 		Id:   req.Id,
-		Code: resource.Code_CODE_OK,
-		Data: []byte("resp with data"),
+		Code: deviceverifier.Code_CODE_PASS,
 	}
 
-	return resp, nil
-}
-func (s *server) Post(ctx context.Context, req *resource.Req) (*resource.Resp, error) {
-	log.Info().Uint32("id", req.Id).Uint32("uri", req.Uri).Str("DeviceID", req.DeviceId).Msg("Post")
-
-	log.Debug().Uint32("id", req.Id).Str("DeviceID", req.DeviceId).Str("req", string(req.Data)).Msg("Post")
-
-	// resp := &resource.Resp{
-	// 	Id:   req.Id,
-	// 	Code: resource.Code_CODE_METHOD_NOT_ALLOWED,
-	// }
-	resp := &resource.Resp{
-		Id:   req.Id,
-		Code: resource.Code_CODE_OK,
-		Data: []byte("resp with data, with post"),
-	}
 	return resp, nil
 }
 
 func main() {
 
+	config.StringKV.Set("log.format", "text")
+	config.StringKV.Set("log.level", "debug")
 	logsettings.Set()
 	log.Info().Msg("server starting ...")
 
@@ -80,7 +64,7 @@ func main() {
 	}
 	s := grpc.NewServer()
 
-	resource.RegisterResourceServiceServer(s, &server{})
+	deviceverifier.RegisterVerifierServiceServer(s, &server{})
 	log.Info().Str("addr", lis.Addr().String()).Msg("server started.")
 	if err := s.Serve(lis); err != nil {
 		log.Fatal().Err(err).Msg("failed to serve")

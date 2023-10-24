@@ -58,6 +58,8 @@ func virtalDeviceRun(ctx context.Context, wait *sync.WaitGroup, deviceID, device
 		return []byte("GET " + deviceID + " resp ok"), nil
 	})
 
+	session.Serve(ctx)
+
 	<-ctx.Done()
 	log.Info().Msg("ctx done")
 	log.Info().Str("deviceid", deviceID).Msg("virtalDeviceRun exit")

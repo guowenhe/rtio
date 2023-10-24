@@ -30,61 +30,6 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-// func callOneTimes(c da.AccessServiceClient) {
-// 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
-// 	defer cancel()
-// 	r, err := c.Send(ctx, &da.SendReq{Id: 1235})
-// 	if err != nil {
-// 		log.Fatalf("could not Send: %v", err)
-// 	}
-// 	log.Printf("resp: %v, %v, %v", r.GetCode(), r.Id, string(r.GetData()))
-// }
-
-// func makeRPCs(cc *grpc.ClientConn, n int) {
-// 	hwc := da.NewAccessServiceClient(cc)
-// 	for i := 0; i < n; i++ {
-// 		callOneTimes(hwc)
-// 		time.Sleep(time.Millisecond * 500)
-// 	}
-// }
-
-func makeRPCs2(cc *grpc.ClientConn, n int) {
-	c := da.NewAccessServiceClient(cc)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	id, err := rtioutils.GenUint32ID()
-	fmt.Println("id", id)
-
-	if err != nil {
-		fmt.Println(id, err)
-		return
-	}
-
-	req := &da.ObGetReq{
-		Uri:      "/test", //0x7c88eed8
-		Id:       id,
-		DeviceId: "cfa09baa-4913-4ad7-a936-2e26f9671b04",
-		Data:     []byte("hello"),
-	}
-
-	stream, err := c.ObGet(ctx, req)
-	if err != nil {
-		fmt.Println(id, err)
-		return
-	}
-
-	for {
-		res, err := stream.Recv()
-		if err != nil {
-			fmt.Println(id, err, "exit")
-			return
-		}
-		fmt.Println(res.Id, res.Code, res.Fid, string(res.Data))
-	}
-
-}
-
 func makeRPCs3(cc *grpc.ClientConn, n int) {
 	c := da.NewAccessServiceClient(cc)
 
@@ -131,6 +76,5 @@ func main() {
 	}
 	defer conn.Close()
 
-	// makeRPCs2(conn, 1)
 	makeRPCs3(conn, 1)
 }

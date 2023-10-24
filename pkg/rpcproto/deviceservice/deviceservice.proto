@@ -1,10 +1,10 @@
 syntax = "proto3";
 
-option go_package = "rtio2/pkg/rpcproto/resource";
-package resource;
+option go_package = "rtio2/pkg/rpcproto/deviceservice";
+package deviceservice;
 
 
-service ResourceService {
+service DeviceService {
   rpc Get (Req) returns (Resp) {}
   rpc Post (Req) returns (Resp) {}
 }

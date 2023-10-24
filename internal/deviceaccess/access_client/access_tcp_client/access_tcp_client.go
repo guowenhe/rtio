@@ -23,6 +23,7 @@ import (
 	"flag"
 	"os/signal"
 	ds "rtio2/internal/deviceaccess/access_client/devicesession"
+	"rtio2/pkg/config"
 	"rtio2/pkg/logsettings"
 
 	"strconv"
@@ -88,7 +89,9 @@ func virtalDeviceRun(ctx context.Context, wait *sync.WaitGroup, deviceID, device
 	session.RegisterGetHandler(0x7c88eed8, Handler)
 	session.RegisterPostHandler(0x7c88eed8, Handler)
 
-	t := time.NewTicker(time.Second * 30)
+	session.Serve(ctx)
+
+	t := time.NewTicker(time.Second * 5)
 	defer t.Stop()
 
 	for {
@@ -98,7 +101,7 @@ func virtalDeviceRun(ctx context.Context, wait *sync.WaitGroup, deviceID, device
 			return
 		case <-t.C:
 			log.Debug().Str("virtalDeviceRun now", time.Now().String())
-			resp, err := session.Post(0x7c88eed8, []byte("test for device post"), time.Second*20)
+			resp, err := session.Post2(ctx, 0x7747f5cc, []byte("test for device post"), time.Second*20)
 			if err != nil {
 				log.Error().Err(err).Msg("")
 			} else {
@@ -110,7 +113,8 @@ func virtalDeviceRun(ctx context.Context, wait *sync.WaitGroup, deviceID, device
 }
 
 func main() {
-
+	config.StringKV.Set("log.format", "text")
+	config.StringKV.Set("log.level", "debug")
 	logsettings.Set()
 	serverAddr := flag.String("server", "localhost:17017", "server address")
 	flag.Parse()

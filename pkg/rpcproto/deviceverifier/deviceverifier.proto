@@ -1,0 +1,27 @@
+// device verifier 
+syntax = "proto3";
+
+option go_package = "rtio2/pkg/rpcproto/deviceverifier";
+package deviceverifier;
+
+enum Code {
+  CODE_UNKNOW = 0;
+  CODE_PASS = 1;
+  CODE_FAIL = 2;
+  CODE_DEVICEID_NOT_FOUND = 3;
+
+}
+
+service VerifierService {
+  rpc verify (verifyReq) returns (verifyResp) {}
+}
+
+message verifyReq {
+    uint32 id = 1;
+    string device_id  = 2;
+    string device_secret  = 3;
+}
+message verifyResp {
+    uint32 id = 1;
+    Code code = 2;
+}
