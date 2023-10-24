@@ -69,14 +69,14 @@ $ ./out/rtio -disable.deviceverify -disable.deviceservice -log.level=info
 INF cmd/rtio/rtio.go:77 > rtio starting ...
 ```
 
-启动设备，模拟打印机。
+另一终端启动设备，模拟打印机。
 
 ```sh
 $ ./out/examples/printer
 INF internal/deviceaccess/access_client/devicesession/devicesession.go:675 > serving 
 ```
 
-模拟用户端，下达开始打印指令。
+另一终端模拟用户端，下达开始打印指令。
 
 ```sh
 $ curl -X POST "http://127.0.0.1:17317/cfa09baa-4913-4ad7-a936-2e26f9671b04/post_handler" -d '{"uri":"/printer/action","id":12667,"data":"c3RhcnQ="}'
