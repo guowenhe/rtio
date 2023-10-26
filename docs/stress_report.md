@@ -64,6 +64,8 @@ export RTIO_LOG_LEVEL=error
 export RTIO_LOG_JSON=true
 ```
 
+> 2023年10月26日 备注：rtio不再使用环境变量设置日志级别，可通过`./rtio -h` 查看帮助。
+  
 ## 压测过程
 
 编译RTIO代码后，生成测试工具如下。
@@ -94,6 +96,8 @@ ls
 ```sh
 nohup ./rtio &
 ```
+
+> 2023年10月26日 备注：后续版本使用`./rtio -log.format=json  -log.level=error`运行RTIO设置正确日志等级（未进行压测验证）。
 
 客户端机器分批运行压测程序，每台机器启动多个进程并绑定虚拟IP：
 
