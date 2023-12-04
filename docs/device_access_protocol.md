@@ -3,7 +3,7 @@
 - [1. 设备接入协议](#1-设备接入协议)
   - [1.1. 消息类型](#11-消息类型)
   - [1.2. 消息格式](#12-消息格式)
-  - [1.3. 设备鉴权](#13-设备鉴权)
+  - [1.3. 设备验证](#13-设备验证)
     - [1.3.1. 请求](#131-请求)
     - [1.3.2. 应答](#132-应答)
   - [1.4. 设备心跳](#14-设备心跳)
@@ -22,8 +22,8 @@
 
 |类型名        | 类型值 |描述        | 方向       |
 |:--------------|:------|:-----------|:-----------|
-|DeviceAuthReq  | 1     |设备鉴权请求 |Device -> Server |
-|DeviceAuthResp | 2     |设备鉴权响应 |Server -> Device  |
+|DeviceVerifyReq  | 1     |设备验证请求 |Device -> Server |
+|DeviceVerifyResp | 2     |设备验证响应 |Server -> Device  |
 |DevicePingReq  | 3     |设备⼼跳请求 |Device -> Server |
 |DevicePingResp | 4     |设备⼼跳响应 |Server -> Device |
 |DeviceSendReq  | 5     |发送消息请求 |Device -> Server |
@@ -43,51 +43,51 @@
    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 ```
 
+- Type: 4-bit 消息类型
 - V (Version): 1-bit 协议版本，当前固定值为0
-- Type: 3-bit 消息类型
-- Code: 3-bit 消息类型为响应（Resp）响应码，请求（Req）固定值0
+- Code: 3-bit 响应码，请求（*Req）固定值0，响应（*Resp）参考[响应码(Code)描述](#17-响应码code描述)
 - MessageID: 16-bit 消息标识，用于匹配请求和响应（同一对Req和Resp该值相同，该值为滚动生成，每请求一次自增1）
 - BodyLength: 16-bit 消息体（Payload）长度（字节数）
 - Body: 消息体（Payload）
 
-前5字节（除Body字段外）为消息头（Message Header），Body长度由Header中BodyLength字段表示。
+消息由消息头和消息体构成，前5字节为消息头（Message Header），之后为消息体（Message Body），Body长度由Header中BodyLength字段表示。
   
-## 1.3. 设备鉴权
+## 1.3. 设备验证
 
 ### 1.3.1. 请求
 
-- Header中Type为DeviceAuthReq
-- Header中BodyLength为AuthData长度（字节数）加1（1字节为Device Specifics）
+- Header中Type为DeviceVerifyReq
+- Header中BodyLength为VerifyhData长度（字节数）加1（1字节为Device Specifics）
 
 ```text
     0                   1                   2                   3
     0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-   |CL | Reserves  |     AuthData...       
+   |CL | Reserves  |     VerifyData...       
    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 ```
 
 - Body定义为以下部分
   - Specifics: 8-bit 设备属性
-    - CL (Capacity Level): 2-bit Body的最大承载能力；值0表示512字节, 1表示1024字节，2表示2048字节，3表示4096字节
+    - CL (Capacity Level): 2-bit Body的最大承载能力；0表示512字节, 1表示1024字节，2表示2048字节，3表示4096字节
     - Reserves: 保留字段
-- AuthData：设备ID和密钥的拼装，由“:”连接(deviceID:deviceSecret)，总长度不超过512字节
+- VerifyData：设备ID和密钥的拼装(deviceID:deviceSecret)，由“:”连接，总长度不超过512字节
 
 ### 1.3.2. 应答
 
-- Header中Type为DeviceAuthResp
+- Header中Type为DeviceVerifyResp
 - Header中MessageID必须与请求匹配
 - Header中Code为响应码
 - Body为空
 
-注意：连接建立起来后，如果超过15秒未完成Auth，服务端直接断开连接，不返回应答数据。
+注意：连接建立起来后，如果超过15秒未完成Verify，服务端直接断开连接，不返回应答数据。
 
 ## 1.4. 设备心跳
 
 ### 1.4.1. 请求
 
 - Header中Type为DevicePingReq
-- Header中BodyLength为0时表示默认心跳间隔300秒，否则为2（字节）
+- Header中BodyLength为0时表示默认心跳间隔300秒，否则为2（2字节Body）
 
 ```text
     0                   1                   2                   3
@@ -106,7 +106,7 @@
 - Header中MessageID必须与请求匹配
 - Header中Code为响应码
 
-注意: 连接建立起来且鉴权成功后，未按间隔发送心跳且没有数据通信，服务端直接断开连接，不返回应答数据。
+注意: 连接建立起来且验证成功后，未按间隔发送心跳且没有数据通信，服务端直接断开连接，不返回应答数据。
 
 ## 1.5. 发送消息
 
@@ -115,7 +115,7 @@
 ### 1.5.1. 请求
 
 - Header中Type为DeviceSendReq或者ServerSendReq
-- Header中BodyLength为Body所承载字节数，最大值为DeviceAuthReq指定的Cap值
+- Header中BodyLength为Body所承载字节数，最大值为DeviceVerifyReq指定的“Body的最大承载能力”字节数
 
 ```text
     0                   1                   2                   3
@@ -133,7 +133,7 @@
 - Header中Type为对应的DeviceSendResp或者ServerSendResp
 - Header中MessageID必须与请求匹配
 - Header中Code为响应码
-- Header中BodyLength为Body所承载字节数，最大值为DeviceAuthReq指定的Cap值
+- Header中BodyLength为Body所承载字节数，最大值为DeviceVerifyReq指定的“Body的最大承载能力”字节数
 
 ```text
     0                   1                   2                   3
@@ -158,7 +158,7 @@ REST-Like Method：
 |ConstrainedPost | 2     |修改资源（受限模式） |支持U2M和M2S|
 |ObservedGet    | 3     |获取资源（观察者模式） |仅支持U2M|
 
-受限模式为Body大小受备Auth时指定的CL (Capacity Level)的长度。
+受限模式为Body最大值长度为DeviceVerifyReq指定的“Body的最大承载能力”字节数。
 
 ### 1.6.1 ConstrainedGet和ConstrainedPost
 
@@ -176,7 +176,7 @@ REST-Like Method：
 
 - Method - 4-bit 请求方法。
 - Reserve（Reserves） - 4 bit 保留。
-- URIDigest: 32-bit 资源地址，对字符串形式的URI经过CRC32计算，得出的哈希摘要。
+- URIDigest: 32-bit 资源地址，对String形式的URI经过CRC32计算，得出的哈希摘要。
 - Data - 请求内容。
 
 响应报文：
@@ -309,6 +309,6 @@ sequenceDiagram
 |0   |失败，未知原因||
 |1   |成功||
 |2   |消息类型错误||
-|3   |鉴权失败||
+|3   |验证失败||
 |4   |参数无效||
 |5   |BodyLength错误||

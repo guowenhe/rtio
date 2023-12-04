@@ -47,21 +47,21 @@ const (
 var (
 	OutgoingChanSize = 10
 
-	ErrRtioInternalServerError = errors.New("ErrRtioInternalServerError")
-	ErrSessionNotFound         = errors.New("ErrSessionNotFound")
-	ErrDataType                = errors.New("ErrDataType")
-	ErrOverCapacity            = errors.New("ErrOverCapacity")
-	ErrSendTimeout             = errors.New("ErrSendTimeout")
-	ErrSendRespChannClose      = errors.New("ErrSendRespChannClose")
-	ErrSessionAuthData         = errors.New("ErrSessionAuthData")
-	ErrSessionAuthNotCompleted = errors.New("ErrSessionAuthNotCompleted")
-	ErrSessionHeartbeatTimeout = errors.New("ErrSessionHeartbeatTimeout")
-	ErrHeaderIDNotExist        = errors.New("ErrHeaderIDNotExist")
-	ErrObservaNotMatch         = errors.New("ErrObservaNotMatch")
-	ErrObservaNotFound         = errors.New("ErrObservaNotFound")
-	ErrMethodNotAllowed        = errors.New("ErrMethodNotAllowed")
-	ErrResourceNotFound        = errors.New("ErrResourceNotFound")
-	ErrMethodNotMatch          = errors.New("ErrMethodNotMatch")
+	ErrRtioInternalServerError   = errors.New("ErrRtioInternalServerError")
+	ErrSessionNotFound           = errors.New("ErrSessionNotFound")
+	ErrDataType                  = errors.New("ErrDataType")
+	ErrOverCapacity              = errors.New("ErrOverCapacity")
+	ErrSendTimeout               = errors.New("ErrSendTimeout")
+	ErrSendRespChannClose        = errors.New("ErrSendRespChannClose")
+	ErrSessionVerifyData         = errors.New("ErrSessionVerifyData")
+	ErrSessionVerifyNotCompleted = errors.New("ErrSessionVerifyNotCompleted")
+	ErrSessionHeartbeatTimeout   = errors.New("ErrSessionHeartbeatTimeout")
+	ErrHeaderIDNotExist          = errors.New("ErrHeaderIDNotExist")
+	ErrObservaNotMatch           = errors.New("ErrObservaNotMatch")
+	ErrObservaNotFound           = errors.New("ErrObservaNotFound")
+	ErrMethodNotAllowed          = errors.New("ErrMethodNotAllowed")
+	ErrResourceNotFound          = errors.New("ErrResourceNotFound")
+	ErrMethodNotMatch            = errors.New("ErrMethodNotMatch")
 )
 
 type Message struct {
@@ -81,7 +81,7 @@ type Session struct {
 	BodyCapSize      uint16
 	heartbeatSeconds uint16
 	remoteAddr       net.Addr
-	authPass         bool
+	verifyPass       bool
 	cancel           context.CancelFunc
 	done             chan struct{}
 }
@@ -90,7 +90,7 @@ func newSession(conn net.Conn) *Session {
 	s := &Session{
 		conn:             conn,
 		outgoingChan:     make(chan []byte, OutgoingChanSize),
-		authPass:         false,
+		verifyPass:       false,
 		done:             make(chan struct{}, 1),
 		heartbeatSeconds: HEARTBEAT_SECONDS_DEFAULT,
 	}
@@ -340,74 +340,74 @@ func (s *Session) Cancel() {
 func (s *Session) Done() <-chan struct{} {
 	return s.done
 }
-func (s *Session) receiveAuthReq(ctx context.Context, header *dp.Header) (bool, error) {
+func (s *Session) receiveVerifyReq(ctx context.Context, header *dp.Header) (bool, error) {
 	reqBodyBuf := make([]byte, header.BodyLen)
 	readLen, err := io.ReadFull(s.conn, reqBodyBuf)
 	if err != nil {
-		log.Error().Int("readLen", readLen).Err(err).Msg("receiveAuthReq, ReadFull")
+		log.Error().Int("readLen", readLen).Err(err).Msg("receiveVerifyReq, ReadFull")
 		return false, err
 	}
-	req, err := dp.DecodeAuthReqBody(header, reqBodyBuf)
+	req, err := dp.DecodeVerifyReqBody(header, reqBodyBuf)
 	if err != nil {
-		log.Error().Err(err).Msg("receiveAuthReq, DecodeBodyAuthReq")
+		log.Error().Err(err).Msg("receiveVerifyReq, DecodeBodyVerifyReq")
 		return false, err
 	}
 	if len(req.DeviceID) == 0 || len(req.DeviceSecret) == 0 {
-		log.Error().Err(ErrSessionAuthData).Msg("receiveAuthReq, DecodeBodyAuthReq")
-		return false, s.sendAuthResp(header, dp.Code_ParaInvalid)
+		log.Error().Err(ErrSessionVerifyData).Msg("receiveVerifyReq, DecodeBodyVerifyReq")
+		return false, s.sendVerifyResp(header, dp.Code_ParaInvalid)
 	}
 	// device verify
 	if !config.BoolKV.GetWithDefault("disable.deviceverify", false) {
-		authClient, err := backendconn.GetDeviceVerifierClient()
+		verifyClient, err := backendconn.GetDeviceVerifierClient()
 		if err != nil {
 			log.Error().Err(err).Msg("GetDeviceVerifierClient err")
-			return false, s.sendAuthResp(header, dp.Code_UnkownErr)
+			return false, s.sendVerifyResp(header, dp.Code_UnkownErr)
 		}
 
 		id, err := ru.GenUint32ID()
 		if err != nil {
 			log.Error().Err(err).Msg("GenUint32ID err")
-			return false, s.sendAuthResp(header, dp.Code_UnkownErr)
+			return false, s.sendVerifyResp(header, dp.Code_UnkownErr)
 		}
 		verifierReq := &deviceverifier.VerifyReq{
 			Id:           id,
 			DeviceId:     req.DeviceID,
 			DeviceSecret: req.DeviceSecret,
 		}
-		VerifyResp, err := authClient.Verify(ctx, verifierReq)
+		VerifyResp, err := verifyClient.Verify(ctx, verifierReq)
 		if err != nil {
 			log.Error().Err(err).Msg("call Verify err")
-			return s.authPass, s.sendAuthResp(header, dp.Code_UnkownErr)
+			return s.verifyPass, s.sendVerifyResp(header, dp.Code_UnkownErr)
 		}
 		if VerifyResp.Code != deviceverifier.Code_CODE_PASS {
-			log.Error().Err(err).Str("deviceverifiercode", VerifyResp.Code.String()).Msg("receiveAuthReq")
-			return false, s.sendAuthResp(header, dp.Code_AuthFail)
+			log.Error().Err(err).Str("deviceverifiercode", VerifyResp.Code.String()).Msg("receiveVerifyReq")
+			return false, s.sendVerifyResp(header, dp.Code_VerifyFail)
 		}
 	}
-	// auth pass
-	s.authPass = true
+	// verify pass
+	s.verifyPass = true
 	s.deviceID = req.DeviceID
 	capSize, err := dp.GetCapSize(req.CapLevel)
 	if err != nil {
-		return true, s.sendAuthResp(header, dp.Code_Success)
+		return true, s.sendVerifyResp(header, dp.Code_Success)
 	}
 	s.BodyCapSize = capSize
 	return true, nil
 }
 
-func (s *Session) sendAuthResp(header *dp.Header, code dp.RemoteCode) error {
-	resp := &dp.AuthResp{
+func (s *Session) sendVerifyResp(header *dp.Header, code dp.RemoteCode) error {
+	resp := &dp.VerifyResp{
 		Header: &dp.Header{
 			Version: dp.Version,
-			Type:    dp.MsgType_DeviceAuthResp,
+			Type:    dp.MsgType_DeviceVerifyResp,
 			ID:      header.ID,
 			BodyLen: 0,
 			Code:    code,
 		},
 	}
-	respBuf, err := dp.EncodeAuthResp(resp)
+	respBuf, err := dp.EncodeVerifyResp(resp)
 	if err != nil {
-		log.Error().Err(err).Msg("deviceSendAuthResp")
+		log.Error().Err(err).Msg("deviceSendVerifyResp")
 		return err
 	}
 	s.outgoingChan <- respBuf
@@ -611,7 +611,7 @@ func (s *Session) deviceSendRequest(header *dp.Header) error {
 	return nil
 }
 func (s *Session) tcpIncomming(serveCtx context.Context, addSession func(string, *Session),
-	authTimer *time.Timer, heartbeatTimer *time.Ticker, errChan chan<- error) {
+	verifyTimer *time.Timer, heartbeatTimer *time.Ticker, errChan chan<- error) {
 	defer func() {
 		log.Debug().Msg("tcpIncomming exit")
 	}()
@@ -637,15 +637,15 @@ func (s *Session) tcpIncomming(serveCtx context.Context, addSession func(string,
 			}
 
 			switch header.Type {
-			case dp.MsgType_DeviceAuthReq:
-				if ok, err := s.receiveAuthReq(serveCtx, header); err != nil {
+			case dp.MsgType_DeviceVerifyReq:
+				if ok, err := s.receiveVerifyReq(serveCtx, header); err != nil {
 					errChan <- err
 					return
 				} else {
-					if ok { // auth passed
+					if ok { // verify passed
 						addSession(s.deviceID, s)
-						authTimer.Stop()
-						log.Debug().Msg("tcpIncomming, auth passed, authTimer stoped")
+						verifyTimer.Stop()
+						log.Debug().Msg("tcpIncomming, verify passed, verifyTimer stoped")
 					}
 				}
 			case dp.MsgType_DevicePingReq:
@@ -717,29 +717,29 @@ func (s *Session) serve(ctx context.Context, wait *sync.WaitGroup,
 			v.(*Observa).SessionDoneChan <- struct{}{}
 			return true
 		})
-		// delete session when auth pass and session be created
-		if s.authPass {
+		// delete session when verify pass and session be created
+		if s.verifyPass {
 			delSession(s.deviceID)
 		}
 		s.done <- struct{}{}
 	}()
 
-	authTimer := time.NewTimer(time.Second * 15)
-	defer authTimer.Stop()
+	verifyTimer := time.NewTimer(time.Second * 15)
+	defer verifyTimer.Stop()
 	heartbeatTimer := time.NewTicker(time.Second * calcuCheckSenconds(s.heartbeatSeconds))
 	defer heartbeatTimer.Stop()
 	errChan := make(chan error, 2)
 	go s.tcpOutgoing(serveCtx, errChan)
-	go s.tcpIncomming(serveCtx, addSession, authTimer, heartbeatTimer, errChan)
+	go s.tcpIncomming(serveCtx, addSession, verifyTimer, heartbeatTimer, errChan)
 
 	storeTicker := time.NewTicker(time.Second * 5)
 	defer storeTicker.Stop()
 
 	for {
 		select {
-		case <-authTimer.C:
-			log.Debug().Err(ErrSessionAuthNotCompleted).Msg("authTimer timeout")
-			errChan <- ErrSessionAuthNotCompleted
+		case <-verifyTimer.C:
+			log.Debug().Err(ErrSessionVerifyNotCompleted).Msg("verifyTimer timeout")
+			errChan <- ErrSessionVerifyNotCompleted
 			return
 		case <-heartbeatTimer.C:
 			log.Debug().Err(ErrSessionHeartbeatTimeout).Msg("tcpIncomming heartbeatTimer timeout")

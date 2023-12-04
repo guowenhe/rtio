@@ -23,11 +23,12 @@ import (
 	"errors"
 	"io"
 	"net"
+	"sync/atomic"
+	"time"
+
 	dp "rtio2/pkg/deviceproto"
 	ru "rtio2/pkg/rtioutils"
 	"rtio2/pkg/timekv"
-	"sync/atomic"
-	"time"
 
 	"github.com/rs/zerolog/log"
 )
@@ -41,7 +42,7 @@ var (
 	ErrOverCapacity       = errors.New("ErrOverCapacity")
 	ErrSendTimeout        = errors.New("ErrSendTimeout")
 	ErrCanceled           = errors.New("ErrCanceled")
-	ErrAuthFailed         = errors.New("ErrAuthFailed")
+	ErrVerifyFailed       = errors.New("ErrVerifyFailed")
 	ErrPingFailed         = errors.New("ErrPingFailed")
 	ErrTransFunc          = errors.New("ErrTransFunc")
 	ErrObservaNotMatch    = errors.New("ErrObservaNotMatch")
@@ -75,7 +76,6 @@ func Connect(ctx context.Context, deviceID, deviceSecret, serverAddr string) (*D
 	session := newDeviceSession(conn, deviceID, deviceSecret, serverAddr)
 	return session, nil
 }
-
 func ConnectWithLocalAddr(ctx context.Context, deviceID, deviceSecret, localAddr, serverAddr string) (*DeviceSession, error) {
 	laddr, err := net.ResolveTCPAddr("tcp", localAddr)
 	if err != nil {
@@ -104,6 +104,13 @@ func ConnectWithLocalAddr(ctx context.Context, deviceID, deviceSecret, localAddr
 	return session, nil
 }
 
+func (s *DeviceSession) SetHeartbeatSeconds(n uint16) {
+	s.heartbeatSeconds = n
+}
+func (s *DeviceSession) Serve(ctx context.Context) {
+	go s.serve(ctx, s.errChan)
+	go s.recover(ctx, s.errChan)
+}
 func newDeviceSession(conn net.Conn, deviceId, deviceSecret, serverAddr string) *DeviceSession {
 	s := &DeviceSession{
 		deviceID:           deviceId,
@@ -123,23 +130,19 @@ func newDeviceSession(conn net.Conn, deviceId, deviceSecret, serverAddr string) 
 
 	return s
 }
-func (s *DeviceSession) Serve(ctx context.Context) {
-	go s.serve(ctx, s.errChan)
-	go s.recover(ctx, s.errChan)
-}
 func (s *DeviceSession) genHeaderID() uint16 {
 	return uint16(s.rollingHeaderID.Add(1))
 }
 
-func (s *DeviceSession) auth() error {
+func (s *DeviceSession) verify() error {
 	headerID, err := ru.GenUint16ID()
 	if err != nil {
 		return err
 	}
-	req := &dp.AuthReq{
+	req := &dp.VerifydReq{
 		Header: &dp.Header{
 			Version: dp.Version,
-			Type:    dp.MsgType_DeviceAuthReq,
+			Type:    dp.MsgType_DeviceVerifyReq,
 			ID:      headerID,
 		},
 		CapLevel:     1,
@@ -147,7 +150,7 @@ func (s *DeviceSession) auth() error {
 		DeviceSecret: s.deviceSecret,
 	}
 
-	buf, err := dp.EncodeAuthReq(req)
+	buf, err := dp.EncodeVerifyReq(req)
 	if err != nil {
 		return err
 	}
@@ -268,10 +271,8 @@ func (s *DeviceSession) receiveCoResp(headerID uint16, respChan <-chan []byte, t
 	}
 }
 
-func (s *DeviceSession) receiveCoResp2(ctx context.Context, headerID uint16, respChan <-chan []byte, timeout time.Duration) (dp.StatusCode, []byte, error) {
+func (s *DeviceSession) receiveCoRespWithContext(ctx context.Context, headerID uint16, respChan <-chan []byte) (dp.StatusCode, []byte, error) {
 	defer s.sendIDStore.Del(timekv.Key(headerID))
-	t := time.NewTimer(timeout)
-	defer t.Stop()
 	select {
 	case sendRespBody, ok := <-respChan:
 		if !ok {
@@ -290,9 +291,6 @@ func (s *DeviceSession) receiveCoResp2(ctx context.Context, headerID uint16, res
 		log.Info().Uint16("headerid", coResp.HeaderID).Str("status", coResp.Code.String()).Msg("receiveCoResp")
 
 		return coResp.Code, coResp.Data, nil
-	case <-t.C:
-		log.Error().Err(ErrSendTimeout).Msg("receiveCoResp")
-		return dp.StatusCode_Unknown, nil, ErrSendTimeout
 	case <-ctx.Done():
 		log.Info().Msg("context done")
 		return dp.StatusCode_Unknown, nil, ErrCanceled
@@ -363,10 +361,11 @@ func (s *DeviceSession) receiveObNotifyResp(obID, headerID uint16, respChan <-ch
 		return dp.StatusCode_Unknown, ErrSendTimeout
 	}
 }
-func (s *DeviceSession) observe(obid uint16, cancal context.CancelFunc, notifyReqChan <-chan []byte) {
-	log.Info().Uint16("obid", obid).Msg("observe")
+func (s *DeviceSession) observe(obID uint16, cancal context.CancelFunc, notifyReqChan <-chan []byte) {
+	log.Info().Uint16("obid", obID).Msg("observe")
+
 	defer func() {
-		log.Info().Uint16("obid", obid).Msg("observe exit")
+		log.Info().Uint16("obid", obID).Msg("observe exit")
 	}()
 	defer cancal()
 
@@ -374,30 +373,30 @@ func (s *DeviceSession) observe(obid uint16, cancal context.CancelFunc, notifyRe
 		data, ok := <-notifyReqChan
 		headerID := s.genHeaderID()
 		if ok {
-			notfyRespChan, err := s.sendObNotifyReq(obid, headerID, data)
+			notfyRespChan, err := s.sendObNotifyReq(obID, headerID, data)
 			if err != nil {
-				log.Error().Uint16("obid", obid).Err(err).Msg("sendObNotifyReq error")
+				log.Error().Uint16("obid", obID).Err(err).Msg("sendObNotifyReq error")
 				return
 			}
-			statusCode, err := s.receiveObNotifyResp(obid, headerID, notfyRespChan, time.Second*20)
+			statusCode, err := s.receiveObNotifyResp(obID, headerID, notfyRespChan, time.Second*20)
 			if err != nil {
-				log.Error().Uint16("obid", obid).Err(err).Msg("receiveObNotifyResp error")
+				log.Error().Uint16("obid", obID).Err(err).Msg("receiveObNotifyResp error")
 				return
 			}
 			if dp.StatusCode_Continue != statusCode {
-				log.Debug().Uint16("obid", obid).Str("status", statusCode.String()).Msg("observe terminiate")
+				log.Debug().Uint16("obid", obID).Str("status", statusCode.String()).Msg("observe terminiate")
 				return
 			}
 		} else {
-			log.Debug().Uint16("obid", obid).Msg("observe, notify req channel closed")
-			notfyRespChan, err := s.sendObNotifyReqTerminate(obid, headerID)
+			log.Debug().Uint16("obid", obID).Msg("observe, notify req channel closed")
+			notfyRespChan, err := s.sendObNotifyReqTerminate(obID, headerID)
 			if err != nil {
-				log.Error().Uint16("obid", obid).Err(err).Msg("sendObNotifyReqTerminate error")
+				log.Error().Uint16("obid", obID).Err(err).Msg("sendObNotifyReqTerminate error")
 				return
 			}
-			_, err = s.receiveObNotifyResp(obid, headerID, notfyRespChan, time.Second*20)
+			_, err = s.receiveObNotifyResp(obID, headerID, notfyRespChan, time.Second*20)
 			if err != nil {
-				log.Error().Uint16("obid", obid).Err(err).Msg("receiveObNotifyResp error")
+				log.Error().Uint16("obid", obID).Err(err).Msg("receiveObNotifyResp error")
 				return
 			}
 			return
@@ -596,7 +595,6 @@ func (s *DeviceSession) tcpIncomming(ctx context.Context, errChan chan<- error) 
 			log.Debug().Msg("tcpIncomming context done")
 			return
 		default:
-
 			headerBuf := make([]byte, dp.HeaderLen)
 			readLen, err := io.ReadFull(s.conn, headerBuf)
 			log.Debug().Int("readlen", readLen).Msg("tcpIncomming, read header")
@@ -611,12 +609,12 @@ func (s *DeviceSession) tcpIncomming(ctx context.Context, errChan chan<- error) 
 			}
 			log.Debug().Uint16("headerid", header.ID).Str("type", header.Type.String()).Msg("tcpIncomming")
 			switch header.Type {
-			case dp.MsgType_DeviceAuthResp:
+			case dp.MsgType_DeviceVerifyResp:
 				if header.Code == dp.Code_Success {
-					log.Info().Msg("auth pass")
+					log.Info().Msg("verify pass")
 				} else {
-					log.Error().Uint8("resp.code", uint8(header.Code)).Msg("auth fail")
-					errChan <- ErrAuthFailed
+					log.Error().Uint8("resp.code", uint8(header.Code)).Msg("verify fail")
+					errChan <- ErrVerifyFailed
 					return
 				}
 			case dp.MsgType_DevicePingResp:
@@ -687,8 +685,8 @@ func (s *DeviceSession) serve(ctx context.Context, errChan chan<- error) {
 	go s.tcpIncomming(ioCtx, errNetChan)
 	go s.tcpOutgoing(ioCtx, heartbeat, errNetChan)
 
-	if err := s.auth(); err != nil {
-		log.Error().Err(err).Msg("send auth error")
+	if err := s.verify(); err != nil {
+		log.Error().Err(err).Str("deviceip", s.conn.LocalAddr().String()).Msg("send verify error")
 		return
 	}
 
@@ -719,7 +717,6 @@ func (s *DeviceSession) serve(ctx context.Context, errChan chan<- error) {
 		case <-heartbeat.C:
 			devicelogger.Debug().Msgf("ping req")
 			s.ping()
-
 		case <-storeTicker.C:
 			// servelogger.Debug().Msgf("storeTicker.C %s", time.Now().String())
 			s.sendIDStore.DelExpireKeys()
@@ -739,6 +736,5 @@ func (s *DeviceSession) recover(ctx context.Context, errChan chan error) {
 				s.reconnect(ctx, s.serverAddr, errChan)
 			})
 		}
-
 	}
 }

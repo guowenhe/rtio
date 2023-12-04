@@ -43,9 +43,9 @@ func main() {
 
 	logFormat := flag.String("log.format", "text", "text or json, default text")
 	logLevel := flag.String("log.level", "warn", " debug, info, warn, error, default warn")
-	deviceVerifier := flag.String("backend.deviceverifier", "deviceverifier.rtio:17915", "device verifier service address, for device auth")
+	deviceVerifier := flag.String("backend.deviceverifier", "deviceverifier.rtio:17915", "device verifier service address, for device verifier")
 	deviceService := flag.String("backend.deviceservice", "deviceservice.rtio:17912", "device service address, device get/post to this service")
-	disableDeviceVerify := flag.Bool("disable.deviceverify", false, "no device authentication")
+	disableDeviceVerify := flag.Bool("disable.deviceverify", false, "no device verifier")
 	// disableUserVerify := flag.Bool("disable.userverify", false, "no user token verify")
 	disableDeviceService := flag.Bool("disable.deviceservice", false, "disable the backend device services")
 	flag.Parse()

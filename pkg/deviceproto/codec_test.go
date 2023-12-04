@@ -1,20 +1,20 @@
 /*
 *
 * Copyright 2023 RTIO authors.
-* 
+*
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
 * You may obtain a copy of the License at
-* 
+*
 *      http://www.apache.org/licenses/LICENSE-2.0
-* 
+*
 * Unless required by applicable law or agreed to in writing, software
 * distributed under the License is distributed on an "AS IS" BASIS,
 * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 * See the License for the specific language governing permissions and
 * limitations under the License.
-* 
-*/
+*
+ */
 
 package deviceproto
 
@@ -26,92 +26,15 @@ import (
 	"gotest.tools/assert"
 )
 
-// func TestEncodeAuthReq(t *testing.T) {
-
-// 	req := &AuthReq{
-// 		CapLevel:     2,
-// 		DeviceID:     "deviceID_001",
-// 		DeviceSecret: "deviceSecret_001",
-// 	}
-// 	buf := make([]byte, 512)
-// 	bodyLen, err := EncodeAuthReq(req, buf[HeaderLen:])
-// 	if err != nil {
-// 		t.Errorf("EncodeAuthReq() err != nil")
-// 	}
-
-// 	if bodyLen != 30 {
-// 		t.Error("EncodeAuthReq bodyLen != 30")
-// 	}
-
-// 	req.Header = &Header{
-// 		Version: Version,
-// 		Type:    MsgType_DeviceAuthReq,
-// 		ID:      0x8899,
-// 		BodyLen: bodyLen,
-// 		Code:    4,
-// 	}
-// 	err = EncodeHeader(req.Header, buf)
-// 	if err != nil {
-// 		t.Errorf("EncodeAuthReq() err != nil")
-// 	}
-// 	got := buf[0 : bodyLen+HeaderLen]
-// 	want := make([]byte, bodyLen+HeaderLen)
-// 	token := "deviceID_001" + ":" + "deviceSecret_001"
-// 	copy(want[0:HeaderLen+1], []byte{0x14, 0x88, 0x99, 0x00, 0x1e, 0x80})
-// 	copy(want[HeaderLen+1:int(HeaderLen)+1+len(token)], token)
-// 	if !bytes.Equal(buf[0:bodyLen+HeaderLen], want) {
-// 		t.Errorf("Encode() = %q, want %q", got, want)
-// 	}
-// 	t.Logf("len=%d buf=%x", bodyLen, buf[0:40])
-// }
-// func TestDecodeAuthReq(t *testing.T) {
-
-// 	token := "deviceID_001" + ":" + "deviceSecret_001"
-// 	bodyLen := uint16(len(token)) + 1
-// 	buf := make([]byte, HeaderLen+uint16(bodyLen))
-// 	copy(buf[0:HeaderLen+1], []byte{0x14, 0x88, 0x99, 0x00, 0x1e, 0x80})
-// 	copy(buf[HeaderLen+1:int(HeaderLen)+1+len(token)], token)
-
-// 	header, err := DecodeHeader(buf)
-// 	if err != nil {
-// 		t.Error("DecodeHeader(buf) err")
-// 	}
-
-// 	headerWant := &Header{
-// 		Version: Version,
-// 		Type:    MsgType_DeviceAuthReq,
-// 		ID:      0x8899,
-// 		BodyLen: bodyLen,
-// 		Code:    4,
-// 	}
-// 	if !reflect.DeepEqual(header, headerWant) {
-// 		t.Error("(heade != headerWant):", header, headerWant)
-// 	}
-
-// 	reqWant := &AuthReq{
-// 		CapLevel:     2,
-// 		DeviceID:     "deviceID_001",
-// 		DeviceSecret: "deviceSecret_001",
-// 	}
-// 	req, err := DecodeAuthReq(buf[HeaderLen : header.BodyLen+HeaderLen])
-// 	if err != nil {
-// 		t.Error("DecodeHeader(buf) err")
-// 	}
-
-// 	if !reflect.DeepEqual(req, reqWant) {
-// 		t.Error("(req != reqWant):", req, reqWant)
-// 	}
-
-// }
-func TestEncodeAuthReq(t *testing.T) {
+func TestEncodeVerifyReq(t *testing.T) {
 	// $ echo -n "cfa09baa-4913-4ad7-a936-2e26f9671b04:mb6bgso4EChvyzA05thF9+wH"| wc -L
 	// 61
 	// $ printf "%x\n" 61
 	// 3d
-	req := &AuthReq{
+	req := &VerifydReq{
 		Header: &Header{
 			Version: Version,
-			Type:    MsgType_DeviceAuthReq,
+			Type:    MsgType_DeviceVerifyReq,
 			ID:      0x8899,
 			BodyLen: 0, // will update this field when decode
 			Code:    4,
@@ -121,7 +44,7 @@ func TestEncodeAuthReq(t *testing.T) {
 		DeviceSecret: "mb6bgso4EChvyzA05thF9+wH",
 	}
 
-	buf, err := EncodeAuthReq(req)
+	buf, err := EncodeVerifyReq(req)
 	assert.NilError(t, err)
 	assert.Equal(t, len(buf), int(HeaderLen+1+0x3d))
 
@@ -135,7 +58,7 @@ func TestEncodeAuthReq(t *testing.T) {
 	t.Logf("len=%d buf=%x", len(buf), buf)
 }
 
-func TestDecodeAuthReq(t *testing.T) {
+func TestDecodeVerifyReq(t *testing.T) {
 
 	token := "cfa09baa-4913-4ad7-a936-2e26f9671b04" + ":" + "mb6bgso4EChvyzA05thF9+wH"
 	bodyLen := uint16(len(token)) + 1
@@ -145,21 +68,21 @@ func TestDecodeAuthReq(t *testing.T) {
 
 	headerWant := &Header{
 		Version: Version,
-		Type:    MsgType_DeviceAuthReq,
+		Type:    MsgType_DeviceVerifyReq,
 		ID:      0x8899,
 		BodyLen: bodyLen,
 		Code:    4,
 	}
-	reqWant := &AuthReq{
+	reqWant := &VerifydReq{
 		Header:       headerWant,
 		CapLevel:     1,
 		DeviceID:     "cfa09baa-4913-4ad7-a936-2e26f9671b04",
 		DeviceSecret: "mb6bgso4EChvyzA05thF9+wH",
 	}
-	req, err := DecodeAuthReq(buf)
+	req, err := DecodeVerifyReq(buf)
 
 	if err != nil {
-		t.Error("DecodeAuthReq err", err)
+		t.Error("DecodeVerifyReq err", err)
 	}
 
 	if !reflect.DeepEqual(req, reqWant) {
@@ -168,25 +91,25 @@ func TestDecodeAuthReq(t *testing.T) {
 	t.Logf("req=%v", req)
 
 }
-func TestDecodeAuthReqDeviceID(t *testing.T) {
+func TestDecodeVerifyReqDeviceID(t *testing.T) {
 	token := "cfa09baa-4913-4ad7-a936-2e26f9671b04f" + ":" + "mb6bgso4EChvyzA05thF9+wH"
 	bodyLen := uint16(len(token)) + 1
 	buf := make([]byte, HeaderLen+uint16(bodyLen))
 	copy(buf[0:HeaderLen+1], []byte{0x14, 0x88, 0x99, 0x00, 0x3e + 1, 0x40})
 	copy(buf[HeaderLen+1:int(HeaderLen)+1+len(token)], token)
-	req, err := DecodeAuthReq(buf)
-	assert.Equal(t, err, ErrAuthData)
+	req, err := DecodeVerifyReq(buf)
+	assert.Equal(t, err, ErrVerifyData)
 	t.Logf("req=%v", req)
 }
-func TestDecodeAuthReqDeviceSecret(t *testing.T) {
+func TestDecodeVerifyReqDeviceSecret(t *testing.T) {
 	{
 		token := "cfa09baa-4913-4ad7-a936-2e26f9671b04" + ":" + "mb6bgso4EChvyzA05thF9+w"
 		bodyLen := uint16(len(token)) + 1
 		buf := make([]byte, HeaderLen+uint16(bodyLen))
 		copy(buf[0:HeaderLen+1], []byte{0x14, 0x88, 0x99, 0x00, 0x3c + 1, 0x40})
 		copy(buf[HeaderLen+1:int(HeaderLen)+1+len(token)], token)
-		req, err := DecodeAuthReq(buf)
-		assert.Equal(t, err, ErrAuthData)
+		req, err := DecodeVerifyReq(buf)
+		assert.Equal(t, err, ErrVerifyData)
 		t.Logf("req=%v", req)
 	}
 	{
@@ -195,7 +118,7 @@ func TestDecodeAuthReqDeviceSecret(t *testing.T) {
 		buf := make([]byte, HeaderLen+uint16(bodyLen))
 		copy(buf[0:HeaderLen+1], []byte{0x14, 0x88, 0x99, 0x00, 0x3c + 1, 0x40})
 		copy(buf[HeaderLen+1:int(HeaderLen)+1+len(token)], token)
-		req, err := DecodeAuthReq(buf)
+		req, err := DecodeVerifyReq(buf)
 		assert.Equal(t, err, ErrExceedLength)
 		t.Logf("req=%v", req)
 	}

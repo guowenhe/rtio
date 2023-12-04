@@ -19,45 +19,77 @@
 package main
 
 import (
+	"context"
+	"flag"
+	"os/signal"
+	"rtio2/internal/deviceaccess/access_server/apprpc"
+	"rtio2/internal/deviceaccess/access_server/backendconn"
+	"rtio2/internal/deviceaccess/access_server/devicetcp"
+	"rtio2/pkg/config"
 	"rtio2/pkg/logsettings"
+	"sync"
+	"syscall"
 
+	"github.com/google/gops/agent"
 	"github.com/rs/zerolog/log"
 )
 
 func main() {
+	tcpAddr := flag.String("deviceaccess.addr", "0.0.0.0:17017", "address for device conntection")
+	rpcAddr := flag.String("backend.rpc.addr", "0.0.0.0:17217", "(optional) address for app-server conntection")
 
+	logFormat := flag.String("log.format", "text", "text or json, default text")
+	logLevel := flag.String("log.level", "warn", " debug, info, warn, error, default warn")
+	deviceVerifier := flag.String("backend.deviceverifier", "deviceverifier.rtio:17915", "device verifier service address, for device auth")
+	deviceService := flag.String("backend.deviceservice", "deviceservice.rtio:17912", "device service address, device get/post to this service")
+	disableDeviceVerify := flag.Bool("disable.deviceverify", false, "no device authentication")
+	disableDeviceService := flag.Bool("disable.deviceservice", false, "disable the backend device services")
+	flag.Parse()
+
+	// set configs
+	config.StringKV.Set("backend.deviceverifier", *deviceVerifier)
+	config.StringKV.Set("backend.deviceservice", *deviceService)
+	config.BoolKV.Set("disable.deviceverify", *disableDeviceVerify)
+	config.BoolKV.Set("disable.deviceservice", *disableDeviceService)
+	config.StringKV.Set("log.format", *logFormat)
+	config.StringKV.Set("log.level", *logLevel)
+	// set log format and level
 	logsettings.Set()
-	log.Info().Msg("access starting ...")
 
-	// if err := agent.Listen(agent.Options{}); err != nil {
-	// 	log.Fatal().Err(err)
-	// }
-	// defer agent.Close()
+	// show configs
+	for _, v := range config.StringKV.List() {
+		log.Debug().Msg(v)
+	}
 
-	// // context and signal
-	// ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	// defer stop()
+	if err := agent.Listen(agent.Options{}); err != nil {
+		log.Fatal().Err(err)
+	}
+	defer agent.Close()
 
-	// wait := &sync.WaitGroup{}
-	// sessionMapChan := make(chan *server_tcp.SessionMap, 1)
-	// errChan := make(chan error, 2)
+	// context and signal
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
 
-	// wait.Add(1)
-	// go router.Serve(ctx, wait)
-	// wait.Add(1)
-	// go server_tcp.TCPServe(ctx, "0.0.0.0:17017", sessionMapChan, errChan, wait)
-	// wait.Add(1)
-	// go server_rpc.InitRPCServer(ctx, "0.0.0.0:17217", sessionMapChan, errChan, wait)
+	log.Info().Msg("deviceaccess starting ...")
 
-	// select {
-	// case <-ctx.Done():
-	// case err := <-errChan:
-	// 	log.Err(err).Msg("access_server failed")
-	// 	if err != nil {
-	// 		stop()
-	// 	}
-	// }
-	// log.Debug().Msg("access_server wait for subroutes")
-	// wait.Wait()
-	// log.Info().Msg("access_server stoped")
+	backendconn.InitBackendConnn()
+
+	wait := &sync.WaitGroup{}
+
+	sessionMap := &devicetcp.SessionMap{}
+	err := devicetcp.InitTCPServer(ctx, *tcpAddr, sessionMap, wait)
+	if err != nil {
+		log.Error().Err(err).Msg("deviceaccess InitTCPServer error")
+		return
+	}
+
+	err = apprpc.InitRPCServer(ctx, *rpcAddr, sessionMap, wait)
+	if err != nil {
+		log.Error().Err(err).Msg("deviceaccess InitRPCServer error")
+		return
+	}
+
+	log.Debug().Msg("deviceaccess wait for subroutes")
+	wait.Wait()
+	log.Info().Msg("deviceaccess stoped")
 }

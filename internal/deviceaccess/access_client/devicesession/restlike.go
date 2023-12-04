@@ -125,7 +125,7 @@ func (s *DeviceSession) Get2(ctx context.Context, uri uint32, Req []byte, timeou
 		log.Error().Err(err).Msg("Get")
 		return nil, ErrInternel
 	}
-	statusCode, data, err := s.receiveCoResp2(ctx, headerID, respChan, timeout)
+	statusCode, data, err := s.receiveCoRespWithContext(ctx, headerID, respChan)
 	if err != nil {
 		if err == ErrSendTimeout {
 			log.Error().Err(err).Msg("Get")
@@ -163,7 +163,7 @@ func (s *DeviceSession) Post2(ctx context.Context, uri uint32, Req []byte, timeo
 		log.Error().Err(err).Msg("Post")
 		return nil, ErrInternel
 	}
-	statusCode, data, err := s.receiveCoResp2(ctx, headerID, respChan, timeout)
+	statusCode, data, err := s.receiveCoRespWithContext(ctx, headerID, respChan)
 	if err != nil {
 		if err == ErrSendTimeout {
 			log.Error().Err(err).Msg("Post")

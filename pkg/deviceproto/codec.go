@@ -26,25 +26,25 @@ import (
 type MsgType uint8
 
 const (
-	MsgType_UnknownType    MsgType = 0
-	MsgType_DeviceAuthReq  MsgType = 1
-	MsgType_DeviceAuthResp MsgType = 2
-	MsgType_DevicePingReq  MsgType = 3
-	MsgType_DevicePingResp MsgType = 4
-	MsgType_DeviceSendReq  MsgType = 5
-	MsgType_DeviceSendResp MsgType = 6
-	MsgType_ServerSendReq  MsgType = 7
-	MsgType_ServerSendResp MsgType = 8
+	MsgType_UnknownType      MsgType = 0
+	MsgType_DeviceVerifyReq  MsgType = 1
+	MsgType_DeviceVerifyResp MsgType = 2
+	MsgType_DevicePingReq    MsgType = 3
+	MsgType_DevicePingResp   MsgType = 4
+	MsgType_DeviceSendReq    MsgType = 5
+	MsgType_DeviceSendResp   MsgType = 6
+	MsgType_ServerSendReq    MsgType = 7
+	MsgType_ServerSendResp   MsgType = 8
 )
 
 func (t MsgType) String() string {
 	switch t {
 	case MsgType_UnknownType:
 		return "MsgType_UnknownType"
-	case MsgType_DeviceAuthReq:
-		return "MsgType_DeviceAuthReq"
-	case MsgType_DeviceAuthResp:
-		return "MsgType_DeviceAuthResp"
+	case MsgType_DeviceVerifyReq:
+		return "MsgType_DeviceVerifyReq"
+	case MsgType_DeviceVerifyResp:
+		return "MsgType_DeviceVerifyResp"
 	case MsgType_DevicePingReq:
 		return "MsgType_DevicePingReq"
 	case MsgType_DevicePingResp:
@@ -71,7 +71,7 @@ var (
 	ErrDecode       = errors.New("ErrDecode")
 	ErrNetRead      = errors.New("ErrNetRead")
 	ErrNetWrite     = errors.New("ErrNetWrite")
-	ErrAuthData     = errors.New("ErrAuthData")
+	ErrVerifyData   = errors.New("ErrVerifyData")
 	ErrCapLevel     = errors.New("ErrCapLevel")
 	ErrHeaderNil    = errors.New("ErrHeaderNil")
 )
@@ -99,14 +99,14 @@ type Header struct {
 	Code    RemoteCode
 }
 
-type AuthReq struct {
+type VerifydReq struct {
 	Header       *Header
 	CapLevel     uint8
 	DeviceID     string
 	DeviceSecret string
 }
 
-type AuthResp struct {
+type VerifyResp struct {
 	Header *Header
 }
 type PingReq struct {
@@ -160,7 +160,7 @@ func EncodeHeader(h *Header, buf []byte) error {
 	return nil
 }
 
-func DecodeAuthReq(buf []byte) (*AuthReq, error) {
+func DecodeVerifyReq(buf []byte) (*VerifydReq, error) {
 	if len(buf) < int(HeaderLen+DeviceIDLen+DeviceSecretLenMin+1) {
 		return nil, ErrNotEnought
 	}
@@ -171,27 +171,27 @@ func DecodeAuthReq(buf []byte) (*AuthReq, error) {
 	if err != nil {
 		return nil, err
 	}
-	req := new(AuthReq)
+	req := new(VerifydReq)
 	req.Header = header
 	req.CapLevel = (buf[HeaderLen] >> 6) & 0x03
-	bufAuth := buf[HeaderLen+1:]
+	bufVerify := buf[HeaderLen+1:]
 
-	if p := bytes.Index(bufAuth, []byte(":")); p != -1 {
+	if p := bytes.Index(bufVerify, []byte(":")); p != -1 {
 		deviceIDLen := p
-		deviceSecretLen := len(bufAuth[p+1:])
+		deviceSecretLen := len(bufVerify[p+1:])
 		if deviceIDLen != int(DeviceIDLen) ||
 			deviceSecretLen < int(DeviceSecretLenMin) ||
 			deviceSecretLen > int(DeviceSecretLenMax) {
-			return nil, ErrAuthData
+			return nil, ErrVerifyData
 		}
-		req.DeviceID = string(bufAuth[0:p])
-		req.DeviceSecret = string(bufAuth[p+1:])
+		req.DeviceID = string(bufVerify[0:p])
+		req.DeviceSecret = string(bufVerify[p+1:])
 	} else {
-		return nil, ErrAuthData
+		return nil, ErrVerifyData
 	}
 	return req, nil
 }
-func DecodeAuthReqBody(header *Header, buf []byte) (*AuthReq, error) {
+func DecodeVerifyReqBody(header *Header, buf []byte) (*VerifydReq, error) {
 	if nil == header {
 		return nil, ErrHeaderNil
 	}
@@ -203,53 +203,53 @@ func DecodeAuthReqBody(header *Header, buf []byte) (*AuthReq, error) {
 		return nil, ErrExceedLength
 	}
 
-	req := new(AuthReq)
+	req := new(VerifydReq)
 	req.Header = header
 	req.CapLevel = (buf[0] >> 6) & 0x03
-	bufAuth := buf[1:]
+	bufVerify := buf[1:]
 
-	if p := bytes.Index(bufAuth, []byte(":")); p != -1 {
+	if p := bytes.Index(bufVerify, []byte(":")); p != -1 {
 		deviceIDLen := p
-		deviceSecretLen := len(bufAuth[p+1:])
+		deviceSecretLen := len(bufVerify[p+1:])
 		if deviceIDLen != int(DeviceIDLen) ||
 			deviceSecretLen < int(DeviceSecretLenMin) ||
 			deviceSecretLen > int(DeviceSecretLenMax) {
-			return nil, ErrAuthData
+			return nil, ErrVerifyData
 		}
-		req.DeviceID = string(bufAuth[0:p])
-		req.DeviceSecret = string(bufAuth[p+1:])
+		req.DeviceID = string(bufVerify[0:p])
+		req.DeviceSecret = string(bufVerify[p+1:])
 	} else {
-		return nil, ErrAuthData
+		return nil, ErrVerifyData
 	}
 	return req, nil
 }
-func EncodeAuthReq(req *AuthReq) ([]byte, error) {
-	authData := req.DeviceID + ":" + req.DeviceSecret
-	bodyLen := len(authData) + 1
+func EncodeVerifyReq(req *VerifydReq) ([]byte, error) {
+	verifyData := req.DeviceID + ":" + req.DeviceSecret
+	bodyLen := len(verifyData) + 1
 
 	if bodyLen < int(1+DeviceIDLen+1+DeviceSecretLenMin) ||
 		bodyLen > int(1+DeviceIDLen+1+DeviceSecretLenMax) {
-		return nil, ErrAuthData
+		return nil, ErrVerifyData
 	}
 	buf := make([]byte, int(HeaderLen)+bodyLen)
 	buf[HeaderLen] = (req.CapLevel << 6) & 0xc0
-	copy(buf[HeaderLen+1:], authData)
+	copy(buf[HeaderLen+1:], verifyData)
 	req.Header.BodyLen = uint16(bodyLen)
 	if err := EncodeHeader(req.Header, buf); err != nil {
 		return nil, err
 	}
 	return buf, nil
 }
-func DecodeAuthResp(buf []byte) (*AuthResp, error) {
+func DecodeVerifyResp(buf []byte) (*VerifyResp, error) {
 	header, err := DecodeHeader(buf)
 	if err != nil {
 		return nil, err
 	}
-	resp := new(AuthResp)
+	resp := new(VerifyResp)
 	resp.Header = header
 	return resp, nil
 }
-func EncodeAuthResp(resp *AuthResp) ([]byte, error) {
+func EncodeVerifyResp(resp *VerifyResp) ([]byte, error) {
 	buf := make([]byte, int(HeaderLen))
 	if err := EncodeHeader(resp.Header, buf); err != nil {
 		return nil, err
