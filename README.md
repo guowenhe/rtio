@@ -1,5 +1,18 @@
 # RTIO（Real Time Input Output Service for IoT）
 
+> **Note:**  
+> This project has been moved to: <https://github.com/mkrainbow/>  
+> The new project URL is: <https://github.com/mkrainbow/rtio>  
+> The new RTIO API is more concise, such as registering handler functions for URIs without needing to calculate the hash value first. It also adds new features, such as support for TLS and JWT authentication. Additionally, the new version does not follow the naming conventions of the current version.  
+> Thank you for following this project!
+
+> **注意：**  
+> 该项目已迁移至：<https://github.com/mkrainbow/>  
+> 新项目地址为：<https://github.com/mkrainbow/rtio>  
+> 新版RTIO API更为简洁，比如给URI注册处理函数，无需先计算哈希值；同时增加了新特性，比如支持TLS和JWT验证。另外，新版本没有延续当前版面的命名方式。  
+> 感谢关注！
+
+
 RTIO提供设备上云的端到端解决方案，主要包括设备接入、设备代理、后端服务代理等功能：
 
 - 用户端使用HTTP GET、POST方法通过RTIO控制和实时观察设备（通常用户端下发指令、观察设备状态）
