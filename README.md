@@ -4,14 +4,14 @@
 > This project has been moved to: <https://github.com/mkrainbow/>  
 > The new RTIO project URL is: <https://github.com/mkrainbow/rtio>  
 > The new RTIO API is more concise, such as registering handler functions for URIs without needing to calculate the hash first. It also adds new features, such as support for TLS and JWT authentication. Additionally, the new version does not follow the naming conventions of the current version.    
-> The device SDK has been updated to include a [C SDK](https://github.com/mkrainbow/rtio-device-sdk-c), which can run on constrained devices. The [GO SDK](https://github.com/mkrainbow/rtio-device-sdk-go) has also been updated.
+> The device SDK has been updated to include a [C SDK](https://github.com/mkrainbow/rtio-device-sdk-c), which can run on constrained devices. The [GO SDK](https://github.com/mkrainbow/rtio-device-sdk-go) has also been updated.  
 > Thank you for following this project!  
 >   
 > **注意：**  
 > 该项目已迁移至：<https://github.com/mkrainbow/>  
 > 新版RTIO地址为：<https://github.com/mkrainbow/rtio>  
 > 新版RTIO API更为简洁，比如给URI注册处理函数，无需先计算哈希值；同时增加了新特性，比如支持TLS和JWT验证。另外，新版本没有延续当前版面的命名方式。  
-> 设备SDK，增加了[C SDK](https://github.com/mkrainbow/rtio-device-sdk-c)，可运行于受限设备。更新了[GO SDK](https://github.com/mkrainbow/rtio-device-sdk-go)。
+> 设备SDK，增加了[C SDK](https://github.com/mkrainbow/rtio-device-sdk-c)，可运行于受限设备。更新了[GO SDK](https://github.com/mkrainbow/rtio-device-sdk-go)。  
 > 感谢您的关注！
 
 
